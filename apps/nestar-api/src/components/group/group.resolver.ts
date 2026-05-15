@@ -55,7 +55,7 @@ export class GroupResolver {
 		return await this.groupService.getGroups(authMember, input);
 	}
 
-	@Roles(MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+	@Roles(MemberType.PARENT, MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
 	@UseGuards(RolesGuard)
 	@Query(() => Group)
 	public async getGroup(@Args('groupId') input: string, @AuthMember() authMember: Member): Promise<Group> {

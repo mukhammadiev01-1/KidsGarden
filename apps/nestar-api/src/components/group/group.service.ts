@@ -1,12 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId } from 'mongoose';
+import { ChildStatus } from '../../libs/enums/child.enum';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { GroupStatus } from '../../libs/enums/group.enum';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberType } from '../../libs/enums/member.enum';
 import { T } from '../../libs/types/common';
+import { Child } from '../../libs/dto/child/child';
 import { Group, Groups } from '../../libs/dto/group/group';
 import { GroupInput, GroupsInquiry } from '../../libs/dto/group/group.input';
 import { GroupUpdate } from '../../libs/dto/group/group.update';
@@ -17,6 +19,7 @@ import { Member } from '../../libs/dto/member/member';
 @Injectable()
 export class GroupService {
 	constructor(
+		@InjectModel('Child') private readonly childModel: Model<Child>,
 		@InjectModel('Group') private readonly groupModel: Model<Group>,
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
@@ -106,6 +109,19 @@ export class GroupService {
 
 		if (authMember.memberType === MemberType.TEACHER) {
 			const canRead = target.teacherIds.some((teacherId: ObjectId) => teacherId.toString() === authMember._id.toString());
+			if (!canRead) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+		} else if (authMember.memberType === MemberType.PARENT) {
+			if (![GroupStatus.ACTIVE, GroupStatus.FULL].includes(target.groupStatus)) {
+				throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+			}
+
+			const canRead = await this.childModel
+				.findOne({
+					parentId: authMember._id,
+					groupId,
+					childStatus: ChildStatus.ACTIVE,
+				})
+				.exec();
 			if (!canRead) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
 		} else {
 			await this.assertCanManageGroups(authMember, target.kindergartenId);

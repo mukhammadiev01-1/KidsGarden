@@ -21,11 +21,14 @@ import { lookupAuthMemberLiked, lookupMember, shapeIntoMongoObjectId } from '../
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
+import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 
 @Injectable()
 export class KindergartenService {
 	constructor(
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
+		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		private memberService: MemberService,
 		private viewService: ViewService,
 		private likeService: LikeService,
@@ -34,6 +37,12 @@ export class KindergartenService {
 	public async createKindergarten(input: KindergartenInput): Promise<Kindergarten> {
 		try {
 			const result = await this.kindergartenModel.create(input);
+			await this.kindergartenStaffModel.create({
+				kindergartenId: result._id,
+				memberId: result.memberId,
+				staffRole: StaffRole.OWNER,
+				staffStatus: StaffStatus.ACTIVE,
+			});
 			await this.memberService.memberStatsEditor({
 				_id: result.memberId,
 				targetKey: 'memberKindergartens',

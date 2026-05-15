@@ -11,6 +11,8 @@ import { KindergartenStaffModule } from './kindergarten-staff/kindergarten-staff
 import { GroupModule } from './group/group.module';
 import { ChildModule } from './child/child.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { StaffApplicationModule } from './staff-application/staff-application.module';
+import { KindergartenAdminApplicationModule } from './kindergarten-admin-application/kindergarten-admin-application.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { AttendanceModule } from './attendance/attendance.module';
     GroupModule,
     ChildModule,
     AttendanceModule,
+    StaffApplicationModule,
+    KindergartenAdminApplicationModule,
     AuthModule,
     CommentModule,
     LikeModule,

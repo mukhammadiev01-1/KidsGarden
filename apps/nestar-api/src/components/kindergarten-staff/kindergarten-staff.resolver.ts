@@ -2,10 +2,11 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import type { ObjectId } from 'mongoose';
 import { KindergartenStaffService } from './kindergarten-staff.service';
-import { KindergartenStaff, KindergartenStaffs } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { KindergartenStaff, KindergartenStaffs, StaffCandidates } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import {
 	KindergartenStaffInput,
 	KindergartenStaffsInquiry,
+	StaffCandidatesInquiry,
 } from '../../libs/dto/kindergarten-staff/kindergarten-staff.input';
 import { KindergartenStaffUpdate } from '../../libs/dto/kindergarten-staff/kindergarten-staff.update';
 import { Member } from '../../libs/dto/member/member';
@@ -79,5 +80,17 @@ export class KindergartenStaffResolver {
 		console.log('Query: getKindergartenStaff');
 		const kindergartenStaffId = shapeIntoMongoObjectId(input);
 		return await this.kindergartenStaffService.getKindergartenStaff(authMember, kindergartenStaffId);
+	}
+
+	@Roles(MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => StaffCandidates)
+	public async searchStaffCandidates(
+		@Args('input') input: StaffCandidatesInquiry,
+		@AuthMember() authMember: Member,
+	): Promise<StaffCandidates> {
+		console.log('Query: searchStaffCandidates');
+		input.kindergartenId = shapeIntoMongoObjectId(input.kindergartenId);
+		return await this.kindergartenStaffService.searchStaffCandidates(authMember, input);
 	}
 }

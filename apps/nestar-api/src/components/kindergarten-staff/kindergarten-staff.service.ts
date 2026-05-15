@@ -2,16 +2,17 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId } from 'mongoose';
 import { Direction, Message } from '../../libs/enums/common.enum';
-import { MemberType } from '../../libs/enums/member.enum';
+import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { T } from '../../libs/types/common';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { Member } from '../../libs/dto/member/member';
-import { KindergartenStaff, KindergartenStaffs } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { KindergartenStaff, KindergartenStaffs, StaffCandidates } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import {
 	KindergartenStaffInput,
 	KindergartenStaffsInquiry,
+	StaffCandidatesInquiry,
 } from '../../libs/dto/kindergarten-staff/kindergarten-staff.input';
 import { KindergartenStaffUpdate } from '../../libs/dto/kindergarten-staff/kindergarten-staff.update';
 
@@ -105,6 +106,73 @@ export class KindergartenStaffService {
 		return target;
 	}
 
+	public async searchStaffCandidates(authMember: Member, input: StaffCandidatesInquiry): Promise<StaffCandidates> {
+		await this.validateKindergarten(input.kindergartenId);
+		await this.assertCanManageStaff(authMember, input.kindergartenId);
+
+		if (input.staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		const searchText = input.searchText.trim();
+		if (!searchText) throw new BadRequestException(Message.BAD_REQUEST);
+
+		const page = Math.max(input.page || 1, 1);
+		const limit = Math.min(Math.max(input.limit || 10, 1), 50);
+		const memberTypes =
+			input.staffRole === StaffRole.TEACHER
+				? [MemberType.TEACHER]
+				: input.staffRole === StaffRole.ADMIN
+					? [MemberType.KINDERGARTEN_ADMIN]
+					: [MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN];
+
+		const linkedStaff = await this.kindergartenStaffModel
+			.find({
+				kindergartenId: input.kindergartenId,
+				staffStatus: { $ne: StaffStatus.REMOVED },
+			})
+			.select('memberId')
+			.lean()
+			.exec();
+		const linkedMemberIds = linkedStaff.map((staff) => staff.memberId);
+		const safeRegex = new RegExp(this.escapeRegex(searchText), 'i');
+		const match: T = {
+			memberStatus: MemberStatus.ACTIVE,
+			memberType: { $in: memberTypes },
+			$or: [{ memberNick: safeRegex }, { memberPhone: safeRegex }],
+		};
+
+		if (linkedMemberIds.length) match._id = { $nin: linkedMemberIds };
+
+		const result = await this.memberModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { memberNick: Direction.ASC } },
+				{
+					$facet: {
+						list: [
+							{ $skip: (page - 1) * limit },
+							{ $limit: limit },
+							{
+								$project: {
+									_id: 1,
+									memberNick: 1,
+									memberPhone: 1,
+									memberType: 1,
+									memberStatus: 1,
+									memberImage: 1,
+								},
+							},
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		return result[0];
+	}
+
 	private async assertCanManageStaff(authMember: Member, kindergartenId: ObjectId): Promise<void> {
 		if (authMember.memberType === MemberType.SUPER_ADMIN) return;
 
@@ -146,5 +214,9 @@ export class KindergartenStaffService {
 		if (staffRole === StaffRole.TEACHER && member.memberType !== MemberType.TEACHER) {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
+	}
+
+	private escapeRegex(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 }

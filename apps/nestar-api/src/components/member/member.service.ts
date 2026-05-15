@@ -27,6 +27,11 @@ export class MemberService {
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
+		if (input.memberType && input.memberType !== MemberType.PARENT) {
+			throw new BadRequestException('Public signup allows only PARENT role');
+		}
+
+		input.memberType = MemberType.PARENT;
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 
 		try {

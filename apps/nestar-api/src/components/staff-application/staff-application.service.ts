@@ -1,0 +1,266 @@
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, ObjectId } from 'mongoose';
+import { Direction, Message } from '../../libs/enums/common.enum';
+import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
+import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
+import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
+import { StaffApplicationStatus } from '../../libs/enums/staff-application.enum';
+import { T } from '../../libs/types/common';
+import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
+import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { Member } from '../../libs/dto/member/member';
+import { StaffApplication, StaffApplications } from '../../libs/dto/staff-application/staff-application';
+import {
+	StaffApplicationInput,
+	StaffApplicationReviewInput,
+	StaffApplicationsInquiry,
+} from '../../libs/dto/staff-application/staff-application.input';
+
+@Injectable()
+export class StaffApplicationService {
+	constructor(
+		@InjectModel('StaffApplication') private readonly staffApplicationModel: Model<StaffApplication>,
+		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
+		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
+		@InjectModel('Member') private readonly memberModel: Model<Member>,
+	) {}
+
+	public async createStaffApplication(authMember: Member, input: StaffApplicationInput): Promise<StaffApplication> {
+		if (authMember.memberType !== MemberType.PARENT) throw new ForbiddenException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		if (input.requestedRole !== StaffRole.TEACHER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		await this.validateKindergarten(input.kindergartenId);
+
+		const duplicate = await this.staffApplicationModel
+			.findOne({
+				kindergartenId: input.kindergartenId,
+				applicantId: authMember._id,
+				applicationStatus: StaffApplicationStatus.PENDING,
+			})
+			.exec();
+		if (duplicate) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		try {
+			return await this.staffApplicationModel.create({
+				...input,
+				applicantId: authMember._id,
+				applicationStatus: StaffApplicationStatus.PENDING,
+			});
+		} catch (err) {
+			console.log('Error, Service.model:', err.message);
+			throw new BadRequestException(Message.CREATE_FAILED);
+		}
+	}
+
+	public async getMyStaffApplications(authMember: Member, input: StaffApplicationsInquiry): Promise<StaffApplications> {
+		const match = this.shapeInquiryMatch(input);
+		match.applicantId = authMember._id;
+
+		return await this.findApplications(match, input);
+	}
+
+	public async getStaffApplications(authMember: Member, input: StaffApplicationsInquiry): Promise<StaffApplications> {
+		const match = this.shapeInquiryMatch(input);
+
+		if (authMember.memberType === MemberType.KINDERGARTEN_ADMIN) {
+			if (match.kindergartenId) {
+				await this.assertCanManageStaff(authMember, match.kindergartenId);
+			} else {
+				const kindergartenIds = await this.getManagedKindergartenIds(authMember._id);
+				match.kindergartenId = { $in: kindergartenIds };
+			}
+		}
+
+		return await this.findApplications(match, input);
+	}
+
+	public async cancelStaffApplication(authMember: Member, applicationId: ObjectId): Promise<StaffApplication> {
+		const application = await this.staffApplicationModel.findById(applicationId).exec();
+		if (!application) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (application.applicantId.toString() !== authMember._id.toString()) {
+			throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+		}
+		if (application.applicationStatus !== StaffApplicationStatus.PENDING) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		const result = await this.staffApplicationModel
+			.findByIdAndUpdate(applicationId, { applicationStatus: StaffApplicationStatus.CANCELED }, { new: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		return result;
+	}
+
+	public async approveStaffApplication(
+		authMember: Member,
+		input: StaffApplicationReviewInput,
+	): Promise<StaffApplication> {
+		const application = await this.validatePendingReviewApplication(authMember, input._id);
+		const applicant = await this.memberModel
+			.findOne({
+				_id: application.applicantId,
+				memberStatus: MemberStatus.ACTIVE,
+			})
+			.exec();
+		if (!applicant) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (![MemberType.PARENT, MemberType.TEACHER].includes(applicant.memberType)) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		const existingStaff = await this.kindergartenStaffModel
+			.findOne({ kindergartenId: application.kindergartenId, memberId: application.applicantId })
+			.exec();
+
+		if (existingStaff && existingStaff.staffStatus !== StaffStatus.REMOVED) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		if (applicant.memberType === MemberType.PARENT) {
+			const updatedApplicant = await this.memberModel
+				.findByIdAndUpdate(applicant._id, { memberType: MemberType.TEACHER }, { new: true })
+				.exec();
+			if (!updatedApplicant) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		}
+
+		if (!existingStaff) {
+			await this.kindergartenStaffModel.create({
+				kindergartenId: application.kindergartenId,
+				memberId: application.applicantId,
+				staffRole: StaffRole.TEACHER,
+				staffStatus: StaffStatus.ACTIVE,
+			});
+		} else if (existingStaff.staffStatus === StaffStatus.REMOVED) {
+			const reactivatedStaff = await this.kindergartenStaffModel
+				.findByIdAndUpdate(
+					existingStaff._id,
+					{ staffRole: StaffRole.TEACHER, staffStatus: StaffStatus.ACTIVE },
+					{ new: true },
+				)
+				.exec();
+			if (!reactivatedStaff) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		}
+
+		const result = await this.staffApplicationModel
+			.findByIdAndUpdate(
+				application._id,
+				{
+					applicationStatus: StaffApplicationStatus.APPROVED,
+					reviewedBy: authMember._id,
+					reviewedAt: new Date(),
+				},
+				{ new: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		return result;
+	}
+
+	public async rejectStaffApplication(authMember: Member, input: StaffApplicationReviewInput): Promise<StaffApplication> {
+		const application = await this.validatePendingReviewApplication(authMember, input._id);
+
+		const result = await this.staffApplicationModel
+			.findByIdAndUpdate(
+				application._id,
+				{
+					applicationStatus: StaffApplicationStatus.REJECTED,
+					reviewedBy: authMember._id,
+					reviewedAt: new Date(),
+					rejectReason: input.rejectReason,
+				},
+				{ new: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		return result;
+	}
+
+	private shapeInquiryMatch(input: StaffApplicationsInquiry): T {
+		const match: T = {};
+		const { kindergartenId, applicantId, requestedRole, applicationStatus } = input.search;
+
+		if (kindergartenId) match.kindergartenId = kindergartenId;
+		if (applicantId) match.applicantId = applicantId;
+		if (requestedRole) match.requestedRole = requestedRole;
+		if (applicationStatus) match.applicationStatus = applicationStatus;
+
+		return match;
+	}
+
+	private async findApplications(match: T, input: StaffApplicationsInquiry): Promise<StaffApplications> {
+		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+
+		const result = await this.staffApplicationModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: sort },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		return result[0];
+	}
+
+	private async validatePendingReviewApplication(authMember: Member, applicationId: ObjectId): Promise<StaffApplication> {
+		const application = await this.staffApplicationModel.findById(applicationId).exec();
+		if (!application) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (application.applicationStatus !== StaffApplicationStatus.PENDING) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		await this.assertCanManageStaff(authMember, application.kindergartenId);
+
+		return application;
+	}
+
+	private async assertCanManageStaff(authMember: Member, kindergartenId: ObjectId): Promise<void> {
+		if (authMember.memberType === MemberType.SUPER_ADMIN) return;
+
+		if (authMember.memberType !== MemberType.KINDERGARTEN_ADMIN) {
+			throw new ForbiddenException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		}
+
+		const ownerRecord = await this.kindergartenStaffModel
+			.findOne({
+				kindergartenId,
+				memberId: authMember._id,
+				staffStatus: StaffStatus.ACTIVE,
+				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+			})
+			.exec();
+
+		if (!ownerRecord) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+	}
+
+	private async validateKindergarten(kindergartenId: ObjectId): Promise<void> {
+		const target = await this.kindergartenModel
+			.findOne({ _id: kindergartenId, kindergartenStatus: KindergartenStatus.ACTIVE })
+			.exec();
+		if (!target) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+	}
+
+	private async getManagedKindergartenIds(memberId: ObjectId): Promise<ObjectId[]> {
+		const staffRecords = await this.kindergartenStaffModel
+			.find({
+				memberId,
+				staffStatus: StaffStatus.ACTIVE,
+				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+			})
+			.exec();
+
+		return staffRecords.map((staff) => staff.kindergartenId);
+	}
+}

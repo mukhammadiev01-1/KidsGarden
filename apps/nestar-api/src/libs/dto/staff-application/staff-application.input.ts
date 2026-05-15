@@ -2,48 +2,46 @@ import { Field, InputType, Int } from '@nestjs/graphql';
 import { IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
 import type { ObjectId } from 'mongoose';
 import { Direction } from '../../enums/common.enum';
-import { StaffRole, StaffStatus } from '../../enums/kindergarten-staff.enum';
+import { StaffRole } from '../../enums/kindergarten-staff.enum';
+import { StaffApplicationStatus } from '../../enums/staff-application.enum';
 
 @InputType()
-export class KindergartenStaffInput {
+export class StaffApplicationInput {
 	@IsNotEmpty()
 	@Field(() => String)
 	kindergartenId: ObjectId;
 
 	@IsNotEmpty()
-	@Field(() => String)
-	memberId: ObjectId;
-
-	@IsNotEmpty()
 	@Field(() => StaffRole)
-	staffRole: StaffRole;
+	requestedRole: StaffRole;
 
 	@IsOptional()
-	@Field(() => StaffStatus, { nullable: true })
-	staffStatus?: StaffStatus;
+	@Length(1, 500)
+	@Field(() => String, { nullable: true })
+	message?: string;
 }
 
 @InputType()
-class KSSearch {
+class StaffApplicationSearch {
 	@IsOptional()
 	@Field(() => String, { nullable: true })
 	kindergartenId?: ObjectId;
 
 	@IsOptional()
 	@Field(() => String, { nullable: true })
-	memberId?: ObjectId;
+	applicantId?: ObjectId;
 
 	@IsOptional()
 	@Field(() => StaffRole, { nullable: true })
-	staffRole?: StaffRole;
+	requestedRole?: StaffRole;
 
 	@IsOptional()
-	@Field(() => StaffStatus, { nullable: true })
-	staffStatus?: StaffStatus;
+	@Field(() => StaffApplicationStatus, { nullable: true })
+	applicationStatus?: StaffApplicationStatus;
 }
 
 @InputType()
-export class KindergartenStaffsInquiry {
+export class StaffApplicationsInquiry {
 	@IsNotEmpty()
 	@Min(1)
 	@Field(() => Int)
@@ -63,32 +61,18 @@ export class KindergartenStaffsInquiry {
 	direction?: Direction;
 
 	@IsNotEmpty()
-	@Field(() => KSSearch)
-	search: KSSearch;
+	@Field(() => StaffApplicationSearch)
+	search: StaffApplicationSearch;
 }
 
 @InputType()
-export class StaffCandidatesInquiry {
+export class StaffApplicationReviewInput {
 	@IsNotEmpty()
 	@Field(() => String)
-	kindergartenId: ObjectId;
-
-	@IsNotEmpty()
-	@Length(2, 50)
-	@Field(() => String)
-	searchText: string;
+	_id: ObjectId;
 
 	@IsOptional()
-	@Field(() => StaffRole, { nullable: true })
-	staffRole?: StaffRole;
-
-	@IsNotEmpty()
-	@Min(1)
-	@Field(() => Int)
-	page: number;
-
-	@IsNotEmpty()
-	@Min(1)
-	@Field(() => Int)
-	limit: number;
+	@Length(1, 500)
+	@Field(() => String, { nullable: true })
+	rejectReason?: string;
 }

@@ -7,6 +7,7 @@ import { ViewModule } from '../view/view.module';
 import { MemberModule } from '../member/member.module';
 import KindergartenSchema from '../../shemas/Kindergarten.model';
 import { LikeModule } from '../like/like.module';
+import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
 
 @Module({
   imports: [
@@ -14,6 +15,10 @@ import { LikeModule } from '../like/like.module';
       {
         name: 'Kindergarten',
         schema: KindergartenSchema,
+      },
+      {
+        name: 'KindergartenStaff',
+        schema: KindergartenStaffSchema,
       },
     ]),
     AuthModule, // AuthModule ni import qiladi, bu yerda kindergarten resolver va service da authentication va authorization uchun
