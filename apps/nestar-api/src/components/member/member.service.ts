@@ -1,10 +1,24 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common'; // NestJS exception va service dekoratorlarini import qiladi
+import {
+	BadRequestException,
+	ForbiddenException,
+	Injectable,
+	InternalServerErrorException,
+	NotFoundException,
+} from '@nestjs/common'; // NestJS exception va service dekoratorlarini import qiladi
 import { InjectModel } from '@nestjs/mongoose'; // Mongoose modelni inject qilish uchun import
 import { Model, ObjectId } from 'mongoose'; // Mongoose Model type ni import qiladi
-import { Member, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member dto type ni import qiladi
-import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry } from '../../libs/dto/member/member.input'; // signup va login input dto larni import qiladi
+import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member dto type ni import qiladi
+import {
+	KindergartenAdminsInquiry,
+	LoginInput,
+	MemberInput,
+	MembersInquiry,
+	PreviewKindergartenMemberInput,
+} from '../../libs/dto/member/member.input'; // signup va login input dto larni import qiladi
 import { Direction, Message } from '../../libs/enums/common.enum'; // umumiy message enum larni import qiladi
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum'; // member status enum larni import qiladi
+import { PreviewMemberPurpose } from '../../libs/enums/member-preview.enum';
+import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from '../../libs/dto/member/member.update';
 import { StatisticModifier, T } from '../../libs/types/common';
@@ -14,13 +28,25 @@ import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
 import { Follower, Following, MeFollowed } from '../../libs/dto/follow/follow';
-import { publicMemberProjection } from '../../libs/config';
+import { publicMemberProjection, shapeIntoMongoObjectId } from '../../libs/config';
+import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+
+const memberPreviewProjection = {
+	_id: 1,
+	memberNick: 1,
+	memberFullName: 1,
+	memberImage: 1,
+	memberPhone: 1,
+	memberType: 1,
+	memberStatus: 1,
+};
 
 @Injectable()
 export class MemberService {
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
+		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		private authService: AuthService,
 		private viewService: ViewService,
 		private likeService: LikeService,
@@ -160,6 +186,73 @@ export class MemberService {
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		return result[0];
+	}
+
+	public async previewKindergartenMember(
+		authMember: Member,
+		input: PreviewKindergartenMemberInput,
+	): Promise<MemberPreview> {
+		const kindergartenId = shapeIntoMongoObjectId(input.kindergartenId);
+		const targetMemberId = shapeIntoMongoObjectId(input.memberId);
+
+		await this.assertCanPreviewKindergartenMember(authMember, kindergartenId);
+
+		const search = this.buildPreviewMemberSearch(targetMemberId, input);
+		const targetMember = await this.memberModel.findOne(search).select(memberPreviewProjection).lean().exec();
+
+		if (!targetMember) throw new NotFoundException(Message.NO_DATA_FOUND);
+
+		return targetMember;
+	}
+
+	private async assertCanPreviewKindergartenMember(authMember: Member, kindergartenId: ObjectId): Promise<void> {
+		if (authMember.memberType === MemberType.SUPER_ADMIN) return;
+
+		if (authMember.memberType !== MemberType.KINDERGARTEN_ADMIN) {
+			throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		const staff = await this.kindergartenStaffModel
+			.findOne({
+				kindergartenId,
+				memberId: shapeIntoMongoObjectId(authMember._id),
+				staffStatus: StaffStatus.ACTIVE,
+				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+			})
+			.lean()
+			.exec();
+
+		if (!staff) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+	}
+
+	private buildPreviewMemberSearch(targetMemberId: ObjectId, input: PreviewKindergartenMemberInput): T {
+		const search: T = {
+			_id: targetMemberId,
+			memberStatus: MemberStatus.ACTIVE,
+		};
+
+		switch (input.purpose) {
+			case PreviewMemberPurpose.PARENT_CANDIDATE:
+				if (input.staffRole) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+				search.memberType = MemberType.PARENT;
+				break;
+			case PreviewMemberPurpose.STAFF_CANDIDATE:
+				search.memberType = this.resolveStaffCandidateMemberType(input.staffRole);
+				break;
+			default:
+				throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		return search;
+	}
+
+	private resolveStaffCandidateMemberType(staffRole?: StaffRole): MemberType | T {
+		if (staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		if (staffRole === StaffRole.TEACHER) return MemberType.TEACHER;
+		if (staffRole === StaffRole.ADMIN) return MemberType.KINDERGARTEN_ADMIN;
+		if (!staffRole) return { $in: [MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN] };
+
+		throw new BadRequestException(Message.BAD_REQUEST);
 	}
 
 	public async likeTargetMember(memberId: ObjectId, likeRefId: ObjectId): Promise<Member> {

@@ -3,6 +3,8 @@ import { IsIn, IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
 import { MemberAuthType, MemberStatus, MemberType } from '../../enums/member.enum';
 import { availableKindergartenAdminSorts, availableMemberSorts } from '../../config';
 import { Direction } from '../../enums/common.enum';
+import { PreviewMemberPurpose } from '../../enums/member-preview.enum';
+import { StaffRole } from '../../enums/kindergarten-staff.enum';
 
 @InputType()
 export class MemberInput {
@@ -73,6 +75,25 @@ export class KindergartenAdminsInquiry {
   @IsNotEmpty()
   @Field(() => KGAISearch)
   search: KGAISearch;
+}
+
+@InputType()
+export class PreviewKindergartenMemberInput {
+  @IsNotEmpty()
+  @Field(() => String)
+  kindergartenId: string;
+
+  @IsNotEmpty()
+  @Field(() => String)
+  memberId: string;
+
+  @IsNotEmpty()
+  @Field(() => PreviewMemberPurpose)
+  purpose: PreviewMemberPurpose;
+
+  @IsOptional()
+  @Field(() => StaffRole, { nullable: true })
+  staffRole?: StaffRole;
 }
 
 @InputType()

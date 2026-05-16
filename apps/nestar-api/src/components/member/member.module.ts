@@ -9,11 +9,13 @@ import { KindergartenModule } from '../kindergarten/kindergarten.module';
 import { Like } from '../../libs/dto/like/like';
 import { LikeModule } from '../like/like.module';
 import FollowSchema from '../../shemas/Follow.model';
+import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
 
 @Module({
 	imports: [
 		MongooseModule.forFeature([{ name: 'Member', schema: MemberSchema }]),
 		MongooseModule.forFeature([{ name: 'Follow', schema: FollowSchema }]),
+		MongooseModule.forFeature([{ name: 'KindergartenStaff', schema: KindergartenStaffSchema }]),
 		AuthModule,
 		ViewModule,
 		LikeModule,

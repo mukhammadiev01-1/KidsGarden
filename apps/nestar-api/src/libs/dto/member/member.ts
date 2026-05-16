@@ -115,6 +115,30 @@ export class PublicMember {
 }
 
 @ObjectType()
+export class MemberPreview {
+	@Field(() => String)
+	_id: ObjectId;
+
+	@Field(() => String)
+	memberNick: string;
+
+	@Field(() => String, { nullable: true })
+	memberFullName?: string;
+
+	@Field(() => String)
+	memberImage: string;
+
+	@Field(() => String)
+	memberPhone: string;
+
+	@Field(() => MemberType)
+	memberType: MemberType;
+
+	@Field(() => MemberStatus)
+	memberStatus: MemberStatus;
+}
+
+@ObjectType()
 export class Members {
 	@Field(() => [Member])
 	list: Member[];

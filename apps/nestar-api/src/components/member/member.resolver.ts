@@ -1,8 +1,8 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql'; // GraphQL dekoratorlarini import qiladi
 import { MemberService } from './member.service'; // member service business logic faylini import qiladi
 import { InternalServerErrorException, UseGuards} from '@nestjs/common'; // validation va error handling uchun import
-import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry } from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
-import { Member, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
+import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry, PreviewKindergartenMemberInput } from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
+import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import type { ObjectId } from 'mongoose';
@@ -85,6 +85,17 @@ public async getKindergartenAdmins(
 ): Promise<PublicMembers> {
   console.log('Query: getKindergartenAdmins');
   return await this.memberService.getKindergartenAdmins(memberId, input);
+}
+
+@Roles(MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+@UseGuards(RolesGuard)
+@Query(() => MemberPreview)
+public async previewKindergartenMember(
+  @Args('input') input: PreviewKindergartenMemberInput,
+  @AuthMember() authMember: Member,
+): Promise<MemberPreview> {
+  console.log('Query: previewKindergartenMember');
+  return await this.memberService.previewKindergartenMember(authMember, input);
 }
 
 @UseGuards(AuthGuard)
