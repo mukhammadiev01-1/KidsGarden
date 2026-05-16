@@ -19,6 +19,7 @@ export const availableCommentSorts = ['createdAt', 'updatedAt'];
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { T } from './types/common';
+import { MemberStatus } from './enums/member.enum';
 
 export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg'];
 export const getSerialForImage = (filename: string) => {
@@ -108,11 +109,55 @@ export const lookupMember = {
 	},
 };
 
+export const publicMemberProjection = {
+	_id: 1,
+	memberNick: 1,
+	memberImage: 1,
+	memberFullName: 1,
+	memberDesc: 1,
+};
+
+export const lookupPublicMember = {
+	$lookup: {
+		from: 'members',
+		let: { localMemberId: '$memberId' },
+		pipeline: [
+			{
+				$match: {
+					$expr: {
+						$and: [{ $eq: ['$_id', '$$localMemberId'] }, { $eq: ['$memberStatus', MemberStatus.ACTIVE] }],
+					},
+				},
+			},
+			{ $project: publicMemberProjection },
+		],
+		as: 'memberData',
+	},
+};
+
 export const lookupFollowingData = {
 	$lookup: {
 		from: 'members',
 		localField: 'followingId',
 		foreignField: '_id',
+		as: 'followingData',
+	},
+};
+
+export const lookupPublicFollowingData = {
+	$lookup: {
+		from: 'members',
+		let: { localMemberId: '$followingId' },
+		pipeline: [
+			{
+				$match: {
+					$expr: {
+						$and: [{ $eq: ['$_id', '$$localMemberId'] }, { $eq: ['$memberStatus', MemberStatus.ACTIVE] }],
+					},
+				},
+			},
+			{ $project: publicMemberProjection },
+		],
 		as: 'followingData',
 	},
 };
@@ -126,6 +171,24 @@ export const lookupFollowerData = {
 	},
 };
 
+export const lookupPublicFollowerData = {
+	$lookup: {
+		from: 'members',
+		let: { localMemberId: '$followerId' },
+		pipeline: [
+			{
+				$match: {
+					$expr: {
+						$and: [{ $eq: ['$_id', '$$localMemberId'] }, { $eq: ['$memberStatus', MemberStatus.ACTIVE] }],
+					},
+				},
+			},
+			{ $project: publicMemberProjection },
+		],
+		as: 'followerData',
+	},
+};
+
 export const lookupFavoriteKindergarten = {
 	$lookup: {
 		from: 'members',
@@ -135,11 +198,47 @@ export const lookupFavoriteKindergarten = {
 	},
 };
 
+export const lookupPublicFavoriteKindergarten = {
+	$lookup: {
+		from: 'members',
+		let: { localMemberId: '$favoriteKindergarten.memberId' },
+		pipeline: [
+			{
+				$match: {
+					$expr: {
+						$and: [{ $eq: ['$_id', '$$localMemberId'] }, { $eq: ['$memberStatus', MemberStatus.ACTIVE] }],
+					},
+				},
+			},
+			{ $project: publicMemberProjection },
+		],
+		as: 'favoriteKindergarten.memberData',
+	},
+};
+
 export const lookupVisitedKindergarten = {
 	$lookup: {
 		from: 'members',
 		localField: 'visitedKindergarten.memberId',
 		foreignField: '_id',
+		as: 'visitedKindergarten.memberData',
+	},
+};
+
+export const lookupPublicVisitedKindergarten = {
+	$lookup: {
+		from: 'members',
+		let: { localMemberId: '$visitedKindergarten.memberId' },
+		pipeline: [
+			{
+				$match: {
+					$expr: {
+						$and: [{ $eq: ['$_id', '$$localMemberId'] }, { $eq: ['$memberStatus', MemberStatus.ACTIVE] }],
+					},
+				},
+			},
+			{ $project: publicMemberProjection },
+		],
 		as: 'visitedKindergarten.memberData',
 	},
 };

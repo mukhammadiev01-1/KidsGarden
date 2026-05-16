@@ -1,7 +1,7 @@
 import { Field, Int, ObjectType } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
 import { KindergartenLocation, KindergartenStatus, KindergartenType } from '../../enums/kindergarten.enum';
-import { Member, TotalCounter } from '../member/member';
+import { PublicMember, TotalCounter } from '../member/member';
 import { MeLiked } from '../like/like';
 
 @ObjectType()
@@ -70,8 +70,8 @@ export class Kindergarten {
 	updatedAt: Date;
 
 	/** from aggregation **/
-	@Field(() => Member, { nullable: true })
-	memberData?: Member;
+	@Field(() => PublicMember, { nullable: true })
+	memberData?: PublicMember;
 
 	/** from aggregation **/
 	@Field(() => [MeLiked], { nullable: true })

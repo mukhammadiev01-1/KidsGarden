@@ -14,7 +14,7 @@ import { BoardArticleStatus } from '../../libs/enums/board-article.enum';
 import { ViewGroup } from '../../libs/enums/view.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { BoardArticleUpdate } from '../../libs/dto/board-article/board-article.update';
-import { lookupAuthMemberLiked, lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupAuthMemberLiked, lookupPublicMember, shapeIntoMongoObjectId } from '../../libs/config';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
@@ -120,8 +120,8 @@ export class BoardArticleService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit }, //list orqali pagination qilyabmiz
 							{ $limit: input.limit },
-							lookupAuthMemberLiked(memberId), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
-							lookupMember,
+								lookupAuthMemberLiked(memberId), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
+								lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }], //metacounter orqali total sonini qaytaryabmiz
@@ -175,7 +175,7 @@ export class BoardArticleService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
-							lookupMember,
+								lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }], //metacounter orqali total sonini qaytaryabmiz

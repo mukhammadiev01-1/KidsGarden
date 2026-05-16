@@ -8,7 +8,7 @@ import { BoardArticleService } from '../board-article/board-article.service';
 import { MemberService } from '../member/member.service';
 import { KindergartenService } from '../kindergarten/kindergarten.service';
 import { CommentUpdate } from '../../libs/dto/comment/comment.update';
-import { lookupMember } from '../../libs/config';
+import { lookupPublicMember } from '../../libs/config';
 import { Comment, Comments } from '../../libs/dto/comment/comment';
 import { T } from '../../libs/types/common';
 
@@ -94,7 +94,7 @@ public async getComments(memberId: ObjectId, input: CommentsInquiry): Promise<Co
           { $skip: (input.page - 1) * input.limit },
           { $limit: input.limit },
           // meLiked
-          lookupMember,
+          lookupPublicMember,
           { $unwind: '$memberData' },
         ],
         metaCounter: [{ $count: 'total' }],

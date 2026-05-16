@@ -7,8 +7,8 @@ import { Direction, Message } from '../../libs/enums/common.enum';
 import {
 	lookupAuthMemberFollowed,
 	lookupAuthMemberLiked,
-	lookupFollowerData,
-	lookupFollowingData,
+	lookupPublicFollowerData,
+	lookupPublicFollowingData,
 } from '../../libs/config';
 import { FollowInquiry } from '../../libs/dto/follow/follow.input';
 import { T } from '../../libs/types/common';
@@ -84,7 +84,7 @@ export class FollowService {
 							{ $limit: limit }, // limit ga muvofiq obunalarni cheklaymiz, masalan limit 10 bo'lsa, faqat 10 obunani olamiz
 							lookupAuthMemberLiked(memberId, '$followingId'), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 							lookupAuthMemberFollowed({ followerId: memberId, followingId: '$followingId' }), // followerId chunki
-							lookupFollowingData,
+								lookupPublicFollowingData,
 							{ $unwind: '$followingData' }, //array into object
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -116,7 +116,7 @@ export class FollowService {
 							{ $limit: limit },
 							lookupAuthMemberLiked(memberId, '$followerId'), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 							lookupAuthMemberFollowed({ followerId: memberId, followingId: '$followerId' }), //
-							lookupFollowerData,
+								lookupPublicFollowerData,
 							{ $unwind: '$followerData' },
 						],
 						metaCounter: [{ $count: 'total' }],

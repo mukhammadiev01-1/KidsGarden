@@ -17,7 +17,7 @@ import { ViewGroup } from '../../libs/enums/view.enum';
 import { ViewService } from '../view/view.service';
 import moment from 'moment';
 import { KindergartenUpdate } from '../../libs/dto/kindergarten/kindergarten.update';
-import { lookupAuthMemberLiked, lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupAuthMemberLiked, lookupPublicMember, shapeIntoMongoObjectId } from '../../libs/config';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
@@ -130,7 +130,7 @@ export class KindergartenService {
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
 							lookupAuthMemberLiked(memberId), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
-							lookupMember,
+							lookupPublicMember,
 							{ $unwind: '$memberData' }, // $unwind esa memberData ni array dan object ga o'zgartiradi
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -200,7 +200,7 @@ export class KindergartenService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
-							lookupMember,
+							lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -250,7 +250,7 @@ export class KindergartenService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit }, // pagination uchun $skip operatori, bu yerda (input.page - 1) * input.limit ni skip qiladi, bu sayfa numarasına göre doğru kayıtları getirir
 							{ $limit: input.limit },
-							lookupMember,
+								lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],

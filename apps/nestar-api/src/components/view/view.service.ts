@@ -4,7 +4,7 @@ import { Model, ObjectId } from 'mongoose';
 import { View } from '../../libs/dto/view/view';
 import { ViewInput } from '../../libs/dto/view/view.input';
 import { T } from '../../libs/types/common';
-import { lookupVisitedKindergarten } from '../../libs/config';
+import { lookupPublicVisitedKindergarten } from '../../libs/config';
 import { Kindergartens } from '../../libs/dto/kindergarten/kindergarten';
 import { OrdinaryInquiry } from '../../libs/dto/kindergarten/kindergarten.input';
 import { ViewGroup } from '../../libs/enums/view.enum';
@@ -49,7 +49,7 @@ export class ViewService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
-							lookupVisitedKindergarten,
+							lookupPublicVisitedKindergarten,
 							{ $unwind: '$visitedKindergarten.memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],

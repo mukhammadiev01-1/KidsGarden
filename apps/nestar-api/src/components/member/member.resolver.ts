@@ -2,7 +2,7 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql'; // GraphQL de
 import { MemberService } from './member.service'; // member service business logic faylini import qiladi
 import { InternalServerErrorException, UseGuards} from '@nestjs/common'; // validation va error handling uchun import
 import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry } from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
-import { Member, Members } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
+import { Member, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import type { ObjectId } from 'mongoose';
@@ -67,22 +67,22 @@ public async checkAuthRoles(
 }
 
 @UseGuards(WithoutGuard)
-@Query(() => Member)
+@Query(() => PublicMember)
 public async getMember(
   @Args('memberId') input: string,
   @AuthMember('_id') memberId: ObjectId,
-): Promise<Member> {
+): Promise<PublicMember> {
   console.log('Query: getMember');
   const targetId = shapeIntoMongoObjectId(input);
   return await this.memberService.getMember(memberId, targetId);
 }
 
 @UseGuards(WithoutGuard) // without guard bu yerda ishlatilgan, chunki bu query ni auth qilmasdan ham ishlatish mumkin, lekin authMember dekoratori orqali memberId ni olish mumkin, agar auth qilinsa
-@Query(() => Members) // getKindergartenAdmins query si kindergarten adminlarni olish uchun ishlatiladi, bu yerda auth qilmasdan
+@Query(() => PublicMembers) // getKindergartenAdmins query si kindergarten adminlarni olish uchun ishlatiladi, bu yerda auth qilmasdan
 public async getKindergartenAdmins(
   @Args('input') input: KindergartenAdminsInquiry,
   @AuthMember('_id') memberId: ObjectId,
-): Promise<Members> {
+): Promise<PublicMembers> {
   console.log('Query: getKindergartenAdmins');
   return await this.memberService.getKindergartenAdmins(memberId, input);
 }
@@ -191,4 +191,3 @@ files: Promise<FileUpload>[],
 	return uploadedImages;
 }
 }
-

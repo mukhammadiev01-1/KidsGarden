@@ -8,7 +8,7 @@ import { Message } from '../../libs/enums/common.enum';
 import { Kindergartens } from '../../libs/dto/kindergarten/kindergarten';
 import { OrdinaryInquiry } from '../../libs/dto/kindergarten/kindergarten.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
-import { lookupFavoriteKindergarten } from '../../libs/config';
+import { lookupPublicFavoriteKindergarten } from '../../libs/config';
 
 @Injectable()
 export class LikeService {
@@ -63,7 +63,7 @@ export class LikeService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
-							lookupFavoriteKindergarten,
+								lookupPublicFavoriteKindergarten,
 							{ $unwind: '$favoriteKindergarten.memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],

@@ -97,9 +97,36 @@ export class TotalCounter {
 }
 
 @ObjectType()
+export class PublicMember {
+	@Field(() => String)
+	_id: ObjectId;
+
+	@Field(() => String)
+	memberNick: string;
+
+	@Field(() => String)
+	memberImage: string;
+
+	@Field(() => String, { nullable: true })
+	memberFullName?: string;
+
+	@Field(() => String, { nullable: true })
+	memberDesc?: string;
+}
+
+@ObjectType()
 export class Members {
 	@Field(() => [Member])
 	list: Member[];
+
+	@Field(() => [TotalCounter], { nullable: true })
+	metaCounter: TotalCounter[];
+}
+
+@ObjectType()
+export class PublicMembers {
+	@Field(() => [PublicMember])
+	list: PublicMember[];
 
 	@Field(() => [TotalCounter], { nullable: true })
 	metaCounter: TotalCounter[];
