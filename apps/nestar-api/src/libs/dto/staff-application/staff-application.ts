@@ -1,6 +1,6 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
-import { TotalCounter } from '../member/member';
+import { MemberPreview, TotalCounter } from '../member/member';
 import { StaffRole } from '../../enums/kindergarten-staff.enum';
 import { StaffApplicationStatus } from '../../enums/staff-application.enum';
 
@@ -32,6 +32,9 @@ export class StaffApplication {
 
 	@Field(() => String, { nullable: true })
 	rejectReason?: string;
+
+	@Field(() => MemberPreview, { nullable: true })
+	applicantData?: MemberPreview;
 
 	@Field(() => Date)
 	createdAt: Date;

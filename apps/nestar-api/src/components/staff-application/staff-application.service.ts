@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId } from 'mongoose';
+import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { Direction, Message } from '../../libs/enums/common.enum';
+import { memberPreviewProjection } from '../../libs/config';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
@@ -72,7 +73,7 @@ export class StaffApplicationService {
 			}
 		}
 
-		return await this.findApplications(match, input);
+		return await this.findApplications(match, input, true);
 	}
 
 	public async cancelStaffApplication(authMember: Member, applicationId: ObjectId): Promise<StaffApplication> {
@@ -192,8 +193,20 @@ export class StaffApplicationService {
 		return match;
 	}
 
-	private async findApplications(match: T, input: StaffApplicationsInquiry): Promise<StaffApplications> {
+	private async findApplications(
+		match: T,
+		input: StaffApplicationsInquiry,
+		includeApplicantData = false,
+	): Promise<StaffApplications> {
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const listPipeline: PipelineStage.FacetPipelineStage[] = [
+			{ $skip: (input.page - 1) * input.limit },
+			{ $limit: input.limit },
+		];
+
+		if (includeApplicantData) {
+			listPipeline.push(...this.getApplicantDataLookupStages());
+		}
 
 		const result = await this.staffApplicationModel
 			.aggregate([
@@ -201,7 +214,7 @@ export class StaffApplicationService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: listPipeline,
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -211,6 +224,27 @@ export class StaffApplicationService {
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		return result[0];
+	}
+
+	private getApplicantDataLookupStages(): PipelineStage.FacetPipelineStage[] {
+		return [
+			{
+				$lookup: {
+					from: 'members',
+					let: { localApplicantId: '$applicantId' },
+					pipeline: [
+						{
+							$match: {
+								$expr: { $eq: ['$_id', '$$localApplicantId'] },
+							},
+						},
+						{ $project: memberPreviewProjection },
+					],
+					as: 'applicantData',
+				},
+			},
+			{ $unwind: { path: '$applicantData', preserveNullAndEmptyArrays: true } },
+		];
 	}
 
 	private async validatePendingReviewApplication(authMember: Member, applicationId: ObjectId): Promise<StaffApplication> {

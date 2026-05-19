@@ -117,6 +117,16 @@ export const publicMemberProjection = {
 	memberDesc: 1,
 };
 
+export const memberPreviewProjection = {
+	_id: 1,
+	memberNick: 1,
+	memberFullName: 1,
+	memberImage: 1,
+	memberPhone: 1,
+	memberType: 1,
+	memberStatus: 1,
+};
+
 export const lookupPublicMember = {
 	$lookup: {
 		from: 'members',

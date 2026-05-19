@@ -25,6 +25,7 @@ export class KindergartenStaffService {
 	) {}
 
 	public async createKindergartenStaff(authMember: Member, input: KindergartenStaffInput): Promise<KindergartenStaff> {
+		this.assertRegularStaffRole(input.staffRole);
 		await this.assertCanManageStaff(authMember, input.kindergartenId);
 		await this.validateKindergarten(input.kindergartenId);
 		await this.validateStaffMember(input.memberId, input.staffRole);
@@ -42,6 +43,8 @@ export class KindergartenStaffService {
 		if (!target) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		await this.assertCanManageStaff(authMember, target.kindergartenId);
+		if (target.staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		if (input.staffRole) this.assertRegularStaffRole(input.staffRole);
 		if (input.staffRole) await this.validateStaffMember(target.memberId, input.staffRole);
 
 		const result = await this.kindergartenStaffModel.findByIdAndUpdate(input._id, input, { new: true }).exec();
@@ -55,6 +58,7 @@ export class KindergartenStaffService {
 		if (!target) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		await this.assertCanManageStaff(authMember, target.kindergartenId);
+		if (target.staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 
 		const result = await this.kindergartenStaffModel
 			.findByIdAndUpdate(kindergartenStaffId, { staffStatus: StaffStatus.REMOVED }, { new: true })
@@ -200,20 +204,26 @@ export class KindergartenStaffService {
 	}
 
 	private async validateStaffMember(memberId: ObjectId, staffRole: StaffRole): Promise<void> {
-		const member = await this.memberModel.findOne({ _id: memberId }).exec();
+		this.assertRegularStaffRole(staffRole);
+
+		const member = await this.memberModel.findOne({ _id: memberId, memberStatus: MemberStatus.ACTIVE }).exec();
 		if (!member) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		if (![MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN].includes(member.memberType)) {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
 
-		if ([StaffRole.OWNER, StaffRole.ADMIN].includes(staffRole) && member.memberType !== MemberType.KINDERGARTEN_ADMIN) {
+		if (staffRole === StaffRole.ADMIN && member.memberType !== MemberType.KINDERGARTEN_ADMIN) {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
 
 		if (staffRole === StaffRole.TEACHER && member.memberType !== MemberType.TEACHER) {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
+	}
+
+	private assertRegularStaffRole(staffRole: StaffRole): void {
+		if (staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 	}
 
 	private escapeRegex(value: string): string {

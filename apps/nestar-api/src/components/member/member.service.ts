@@ -28,18 +28,8 @@ import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
 import { Follower, Following, MeFollowed } from '../../libs/dto/follow/follow';
-import { publicMemberProjection, shapeIntoMongoObjectId } from '../../libs/config';
+import { memberPreviewProjection, publicMemberProjection, shapeIntoMongoObjectId } from '../../libs/config';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
-
-const memberPreviewProjection = {
-	_id: 1,
-	memberNick: 1,
-	memberFullName: 1,
-	memberImage: 1,
-	memberPhone: 1,
-	memberType: 1,
-	memberStatus: 1,
-};
 
 @Injectable()
 export class MemberService {

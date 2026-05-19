@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId } from 'mongoose';
+import { Model, ObjectId, PipelineStage } from 'mongoose';
+import { memberPreviewProjection } from '../../libs/config';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { KindergartenAdminApplicationStatus } from '../../libs/enums/kindergarten-admin-application.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
@@ -67,7 +68,7 @@ export class KindergartenAdminApplicationService {
 	): Promise<KindergartenAdminApplications> {
 		const match = this.shapeInquiryMatch(input);
 
-		return await this.findApplications(match, input);
+		return await this.findApplications(match, input, true);
 	}
 
 	public async cancelKindergartenAdminApplication(
@@ -170,8 +171,17 @@ export class KindergartenAdminApplicationService {
 	private async findApplications(
 		match: T,
 		input: KindergartenAdminApplicationsInquiry,
+		includeApplicantData = false,
 	): Promise<KindergartenAdminApplications> {
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const listPipeline: PipelineStage.FacetPipelineStage[] = [
+			{ $skip: (input.page - 1) * input.limit },
+			{ $limit: input.limit },
+		];
+
+		if (includeApplicantData) {
+			listPipeline.push(...this.getApplicantDataLookupStages());
+		}
 
 		const result = await this.kindergartenAdminApplicationModel
 			.aggregate([
@@ -179,7 +189,7 @@ export class KindergartenAdminApplicationService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: listPipeline,
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -189,6 +199,27 @@ export class KindergartenAdminApplicationService {
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		return result[0];
+	}
+
+	private getApplicantDataLookupStages(): PipelineStage.FacetPipelineStage[] {
+		return [
+			{
+				$lookup: {
+					from: 'members',
+					let: { localApplicantId: '$applicantId' },
+					pipeline: [
+						{
+							$match: {
+								$expr: { $eq: ['$_id', '$$localApplicantId'] },
+							},
+						},
+						{ $project: memberPreviewProjection },
+					],
+					as: 'applicantData',
+				},
+			},
+			{ $unwind: { path: '$applicantData', preserveNullAndEmptyArrays: true } },
+		];
 	}
 
 	private async validatePendingReviewApplication(applicationId: ObjectId): Promise<KindergartenAdminApplication> {
