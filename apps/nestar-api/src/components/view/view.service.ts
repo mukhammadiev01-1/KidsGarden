@@ -4,13 +4,15 @@ import { Model, ObjectId } from 'mongoose';
 import { View } from '../../libs/dto/view/view';
 import { ViewInput } from '../../libs/dto/view/view.input';
 import { T } from '../../libs/types/common';
-import { lookupPublicVisitedKindergarten } from '../../libs/config';
+import { capPaginationLimit, lookupPublicVisitedKindergarten } from '../../libs/config';
 import { Kindergartens } from '../../libs/dto/kindergarten/kindergarten';
 import { OrdinaryInquiry } from '../../libs/dto/kindergarten/kindergarten.input';
 import { ViewGroup } from '../../libs/enums/view.enum';
 
 @Injectable()
 export class ViewService {
+	private readonly visitedKindergartensListMaxLimit = 100;
+
 	constructor(@InjectModel('View') private readonly viewModel: Model<View>) {}
 
 	public async recordView(input: ViewInput): Promise<View | null> {
@@ -29,6 +31,7 @@ export class ViewService {
 
 	public async getVisitedKindergartens(memberId: ObjectId, input: OrdinaryInquiry): Promise<Kindergartens> {
 		const { page, limit } = input;
+		const cappedLimit = capPaginationLimit(limit, this.visitedKindergartensListMaxLimit);
 		const match: T = { viewGroup: ViewGroup.KINDERGARTEN, memberId: memberId };
 
 		const data: T = await this.viewModel
@@ -47,8 +50,8 @@ export class ViewService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (page - 1) * limit },
-							{ $limit: limit },
+							{ $skip: (page - 1) * cappedLimit },
+							{ $limit: cappedLimit },
 							lookupPublicVisitedKindergarten,
 							{ $unwind: '$visitedKindergarten.memberData' },
 						],

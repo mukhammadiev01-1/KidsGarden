@@ -15,9 +15,12 @@ import { Group } from '../../libs/dto/group/group';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
+import { capPaginationLimit, escapeRegex } from '../../libs/config';
 
 @Injectable()
 export class ChildService {
+	private readonly childrenListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('Child') private readonly childModel: Model<Child>,
 		@InjectModel('Group') private readonly groupModel: Model<Group>,
@@ -98,12 +101,13 @@ export class ChildService {
 		const match: T = {};
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
 		const { parentId, kindergartenId, groupId, childStatus, text } = input.search;
+		const limit = capPaginationLimit(input.limit, this.childrenListMaxLimit);
 
 		if (parentId) match.parentId = parentId;
 		if (kindergartenId) match.kindergartenId = kindergartenId;
 		if (groupId) match.groupId = groupId;
 		if (childStatus) match.childStatus = childStatus;
-		if (text) match.childFullName = { $regex: new RegExp(text, 'i') };
+		if (text) match.childFullName = { $regex: new RegExp(escapeRegex(text), 'i') };
 
 		await this.shapeAccessMatch(authMember, match);
 
@@ -113,7 +117,7 @@ export class ChildService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

@@ -8,10 +8,12 @@ import { Message } from '../../libs/enums/common.enum';
 import { Kindergartens } from '../../libs/dto/kindergarten/kindergarten';
 import { OrdinaryInquiry } from '../../libs/dto/kindergarten/kindergarten.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
-import { lookupPublicFavoriteKindergarten } from '../../libs/config';
+import { capPaginationLimit, lookupPublicFavoriteKindergarten } from '../../libs/config';
 
 @Injectable()
 export class LikeService {
+	private readonly favoriteKindergartensListMaxLimit = 100;
+
 	constructor(@InjectModel('Like') private readonly likeModel: Model<Like>) {}
 
 	public async toggleLike(input: LikeInput): Promise<number> {
@@ -43,6 +45,7 @@ export class LikeService {
 
 	public async getFavoriteKindergartens(memberId: ObjectId, input: OrdinaryInquiry): Promise<Kindergartens> {
 		const { page, limit } = input;
+		const cappedLimit = capPaginationLimit(limit, this.favoriteKindergartensListMaxLimit);
 		const match: T = { likeGroup: LikeGroup.KINDERGARTEN, memberId: memberId };
 
 		const data: T = await this.likeModel
@@ -61,9 +64,9 @@ export class LikeService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (page - 1) * limit },
-							{ $limit: limit },
-								lookupPublicFavoriteKindergarten,
+							{ $skip: (page - 1) * cappedLimit },
+							{ $limit: cappedLimit },
+							lookupPublicFavoriteKindergarten,
 							{ $unwind: '$favoriteKindergarten.memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],

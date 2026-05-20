@@ -1,6 +1,6 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql'; // GraphQL dekoratorlarini import qiladi
 import { MemberService } from './member.service'; // member service business logic faylini import qiladi
-import { InternalServerErrorException, UseGuards} from '@nestjs/common'; // validation va error handling uchun import
+import { BadRequestException, UseGuards } from '@nestjs/common'; // validation va error handling uchun import
 import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry, PreviewKindergartenMemberInput } from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
 import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
 import { AuthGuard } from '../auth/guards/auth.guard';
@@ -13,13 +13,63 @@ import { MemberUpdate } from '../../libs/dto/member/member.update';
 import { getSerialForImage, shapeIntoMongoObjectId, validMimeTypes } from '../../libs/config';
 import { WithoutGuard } from '../auth/guards/without.guard';
 import { GraphQLUpload, FileUpload } from 'graphql-upload';
-import { createWriteStream } from 'fs';
+import { createWriteStream, mkdirSync } from 'fs';
+import * as path from 'path';
 import { Message } from '../../libs/enums/common.enum';
 
 
 @Resolver() // bu class GraphQL resolver ekanini bildiradi
 export class MemberResolver {
-  constructor(private readonly memberService: MemberService) {} // service ni dependency injection orqali oladi
+	private readonly allowedUploadTargets = new Set(['member', 'article', 'property']);
+
+	  constructor(private readonly memberService: MemberService) {} // service ni dependency injection orqali oladi
+
+	private resolveUploadTarget(targetInput: String): string {
+		const target = targetInput?.toString().trim();
+		if (!target) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		let decodedTarget: string;
+		try {
+			decodedTarget = decodeURIComponent(target);
+		} catch (err) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		const hasPathTraversal =
+			decodedTarget !== target ||
+			target.includes('/') ||
+			target.includes('\\') ||
+			target.includes('..') ||
+			path.isAbsolute(target);
+
+		if (hasPathTraversal || !this.allowedUploadTargets.has(target)) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		return target;
+	}
+
+	private buildUploadDestination(target: string, imageName: string): { url: string; filePath: string } {
+		const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+		const targetDir = path.resolve(uploadsRoot, target);
+		const filePath = path.resolve(targetDir, imageName);
+
+		if (!this.isPathInside(uploadsRoot, targetDir) || !this.isPathInside(targetDir, filePath)) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		mkdirSync(targetDir, { recursive: true });
+
+		return {
+			url: `uploads/${target}/${imageName}`,
+			filePath,
+		};
+	}
+
+	private isPathInside(parentPath: string, childPath: string): boolean {
+		const relative = path.relative(parentPath, childPath);
+		return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
+	}
 
   @Mutation(() => Member)
   public async signup(@Args('input') input: MemberInput): Promise<Member> { 
@@ -127,9 +177,10 @@ public async getAllMembersByAdmin(
 @Mutation(() => Member)
 public async updateMemberByAdmin(
   @Args('input') input: MemberUpdate,
+  @AuthMember() authMember: Member,
 ): Promise<Member> {
   console.log('Mutation: updateMemberByAdmin');
-  return await this.memberService.updateMemberByAdmin(input);
+  return await this.memberService.updateMemberByAdmin(input, authMember);
 }
 
 
@@ -137,62 +188,64 @@ public async updateMemberByAdmin(
 
 @UseGuards(AuthGuard)
 @Mutation((returns) => String)
-public async imageUploader(
-	@Args({ name: 'file', type: () => GraphQLUpload }) 
-{ createReadStream, filename, mimetype }: FileUpload, 
-@Args('target') target: String,
-): Promise<string> {
-	console.log('Mutation: imageUploader');
+	public async imageUploader(
+		@Args({ name: 'file', type: () => GraphQLUpload })
+		{ createReadStream, filename, mimetype }: FileUpload,
+		@Args('target') target: String,
+	): Promise<string> {
+		console.log('Mutation: imageUploader');
 
-	if (!filename) throw new Error(Message.UPLOAD_FAILED); // filename bo'lmasa error beradi
-const validMime = validMimeTypes.includes(mimetype); // validMimeTypes bu yerda ruxsat etilgan mime turlarini tekshiradi
-if (!validMime) throw new Error(Message.PROVIDE_ALLOWED_FORMAT); // agar mime turi ruxsat etilgan formatlarda bo'lmasa error beradi
+		if (!filename) throw new Error(Message.UPLOAD_FAILED); // filename bo'lmasa error beradi
+		const validMime = validMimeTypes.includes(mimetype); // validMimeTypes bu yerda ruxsat etilgan mime turlarini tekshiradi
+		if (!validMime) throw new Error(Message.PROVIDE_ALLOWED_FORMAT); // agar mime turi ruxsat etilgan formatlarda bo'lmasa error beradi
 
-const imageName = getSerialForImage(filename); 
-const url = `uploads/${target}/${imageName}`; 
-const stream = createReadStream(); // createReadStream bu yerda file ni o'qish uchun stream yaratadi
+		const safeTarget = this.resolveUploadTarget(target);
+		const imageName = getSerialForImage(filename);
+		const { url, filePath } = this.buildUploadDestination(safeTarget, imageName);
+		const stream = createReadStream(); // createReadStream bu yerda file ni o'qish uchun stream yaratadi
 
-const result = await new Promise((resolve, reject) => { // file ni serverga upload qilish uchun promise yaratadi
-	stream
-		.pipe(createWriteStream(url))
-		.on('finish', async () => resolve(true))
-		.on('error', () => reject(false));
-});
-if (!result) throw new Error(Message.UPLOAD_FAILED);
+		const result = await new Promise((resolve, reject) => { // file ni serverga upload qilish uchun promise yaratadi
+			stream
+				.pipe(createWriteStream(filePath))
+				.on('finish', async () => resolve(true))
+				.on('error', () => reject(false));
+		});
+		if (!result) throw new Error(Message.UPLOAD_FAILED);
 
-return url;
-}
+		return url;
+	}
 
 @UseGuards(AuthGuard)
 @Mutation((returns) => [String])
-public async imagesUploader(
-	@Args('files', { type: () => [GraphQLUpload] })
-files: Promise<FileUpload>[],
-@Args('target') target: String,
-): Promise<string[]> {
-	console.log('Mutation: imagesUploader');
+	public async imagesUploader(
+		@Args('files', { type: () => [GraphQLUpload] })
+		files: Promise<FileUpload>[],
+		@Args('target') target: String,
+	): Promise<string[]> {
+		console.log('Mutation: imagesUploader');
 
-	const uploadedImages = [];
-	const promisedList = files.map(async (img: Promise<FileUpload>, index: number): Promise<Promise<void>> => {
-		try {
-			const { filename, mimetype, encoding, createReadStream } = await img;
+		const uploadedImages = [];
+		const safeTarget = this.resolveUploadTarget(target);
+		const promisedList = files.map(async (img: Promise<FileUpload>, index: number): Promise<Promise<void>> => {
+			try {
+				const { filename, mimetype, createReadStream } = await img;
 
-			const validMime = validMimeTypes.includes(mimetype);
-			if (!validMime) throw new Error(Message.PROVIDE_ALLOWED_FORMAT);
+				const validMime = validMimeTypes.includes(mimetype);
+				if (!validMime) throw new Error(Message.PROVIDE_ALLOWED_FORMAT);
 
-			const imageName = getSerialForImage(filename);
-			const url = `uploads/${target}/${imageName}`;
-			const stream = createReadStream();
+				const imageName = getSerialForImage(filename);
+				const { url, filePath } = this.buildUploadDestination(safeTarget, imageName);
+				const stream = createReadStream();
 
-			const result = await new Promise((resolve, reject) => {
-				stream
-					.pipe(createWriteStream(url))
-					.on('finish', () => resolve(true))
-					.on('error', () => reject(false));
-			});
-			if (!result) throw new Error(Message.UPLOAD_FAILED);
+				const result = await new Promise((resolve, reject) => {
+					stream
+						.pipe(createWriteStream(filePath))
+						.on('finish', () => resolve(true))
+						.on('error', () => reject(false));
+				});
+				if (!result) throw new Error(Message.UPLOAD_FAILED);
 
-			uploadedImages[index] = url;
+				uploadedImages[index] = url;
 		} catch (err) {
 			console.log('Error, file missing!');
 		}

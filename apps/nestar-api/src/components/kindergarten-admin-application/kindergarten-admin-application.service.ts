@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId, PipelineStage } from 'mongoose';
-import { memberPreviewProjection } from '../../libs/config';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, ObjectId, PipelineStage } from 'mongoose';
+import { capPaginationLimit, memberPreviewProjection } from '../../libs/config';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { KindergartenAdminApplicationStatus } from '../../libs/enums/kindergarten-admin-application.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
@@ -19,10 +19,13 @@ import {
 
 @Injectable()
 export class KindergartenAdminApplicationService {
+	private readonly kindergartenAdminApplicationsListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('KindergartenAdminApplication')
 		private readonly kindergartenAdminApplicationModel: Model<KindergartenAdminApplication>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectConnection() private readonly connection: Connection,
 	) {}
 
 	public async createKindergartenAdminApplication(
@@ -101,38 +104,50 @@ export class KindergartenAdminApplicationService {
 		authMember: Member,
 		input: KindergartenAdminApplicationReviewInput,
 	): Promise<KindergartenAdminApplication> {
-		const application = await this.validatePendingReviewApplication(input._id);
-		const applicant = await this.memberModel
-			.findOne({
-				_id: application.applicantId,
-				memberStatus: MemberStatus.ACTIVE,
-			})
-			.exec();
-		if (!applicant) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		const session = await this.connection.startSession();
 
-		if (applicant.memberType !== MemberType.PARENT) {
-			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		try {
+			const result = await session.withTransaction(async () => {
+				const application = await this.validatePendingReviewApplication(input._id, session);
+				const applicant = await this.memberModel
+					.findOne({
+						_id: application.applicantId,
+						memberStatus: MemberStatus.ACTIVE,
+					})
+					.session(session)
+					.exec();
+				if (!applicant) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+				if (applicant.memberType !== MemberType.PARENT) {
+					throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+				}
+
+				const updatedApplicant = await this.memberModel
+					.findByIdAndUpdate(applicant._id, { memberType: MemberType.KINDERGARTEN_ADMIN }, { new: true, session })
+					.exec();
+				if (!updatedApplicant) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+				const approvedApplication = await this.kindergartenAdminApplicationModel
+					.findByIdAndUpdate(
+						application._id,
+						{
+							applicationStatus: KindergartenAdminApplicationStatus.APPROVED,
+							reviewedBy: authMember._id,
+							reviewedAt: new Date(),
+						},
+						{ new: true, session },
+					)
+					.exec();
+				if (!approvedApplication) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+				return approvedApplication;
+			});
+
+			if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+			return result;
+		} finally {
+			await session.endSession();
 		}
-
-		const updatedApplicant = await this.memberModel
-			.findByIdAndUpdate(applicant._id, { memberType: MemberType.KINDERGARTEN_ADMIN }, { new: true })
-			.exec();
-		if (!updatedApplicant) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-
-		const result = await this.kindergartenAdminApplicationModel
-			.findByIdAndUpdate(
-				application._id,
-				{
-					applicationStatus: KindergartenAdminApplicationStatus.APPROVED,
-					reviewedBy: authMember._id,
-					reviewedAt: new Date(),
-				},
-				{ new: true },
-			)
-			.exec();
-		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-
-		return result;
 	}
 
 	public async rejectKindergartenAdminApplication(
@@ -174,9 +189,10 @@ export class KindergartenAdminApplicationService {
 		includeApplicantData = false,
 	): Promise<KindergartenAdminApplications> {
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.kindergartenAdminApplicationsListMaxLimit);
 		const listPipeline: PipelineStage.FacetPipelineStage[] = [
-			{ $skip: (input.page - 1) * input.limit },
-			{ $limit: input.limit },
+			{ $skip: (input.page - 1) * limit },
+			{ $limit: limit },
 		];
 
 		if (includeApplicantData) {
@@ -222,8 +238,13 @@ export class KindergartenAdminApplicationService {
 		];
 	}
 
-	private async validatePendingReviewApplication(applicationId: ObjectId): Promise<KindergartenAdminApplication> {
-		const application = await this.kindergartenAdminApplicationModel.findById(applicationId).exec();
+	private async validatePendingReviewApplication(
+		applicationId: ObjectId,
+		session?: ClientSession,
+	): Promise<KindergartenAdminApplication> {
+		const query = this.kindergartenAdminApplicationModel.findById(applicationId);
+		if (session) query.session(session);
+		const application = await query.exec();
 		if (!application) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		if (application.applicationStatus !== KindergartenAdminApplicationStatus.PENDING) {

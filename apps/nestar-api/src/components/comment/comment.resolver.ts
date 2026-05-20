@@ -3,8 +3,8 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { Comment, Comments } from '../../libs/dto/comment/comment';
-import { CommentInput, CommentsInquiry } from '../../libs/dto/comment/comment.input';
-import { CommentUpdate } from '../../libs/dto/comment/comment.update';
+import { AdminCommentsInquiry, CommentInput, CommentsInquiry } from '../../libs/dto/comment/comment.input';
+import { CommentAdminUpdate, CommentUpdate } from '../../libs/dto/comment/comment.update';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { WithoutGuard } from '../auth/guards/without.guard';
@@ -50,6 +50,23 @@ export class CommentResolver {
   }
 
   /** SUPER_ADMIN **/
+
+@Roles(MemberType.SUPER_ADMIN)
+@UseGuards(RolesGuard)
+@Query((returns) => Comments)
+public async getAllCommentsByAdmin(@Args('input') input: AdminCommentsInquiry): Promise<Comments> {
+  console.log('Query: getAllCommentsByAdmin');
+  return await this.commentService.getAllCommentsByAdmin(input);
+}
+
+@Roles(MemberType.SUPER_ADMIN)
+@UseGuards(RolesGuard)
+@Mutation((returns) => Comment)
+public async updateCommentByAdmin(@Args('input') input: CommentAdminUpdate): Promise<Comment> {
+  console.log('Mutation: updateCommentByAdmin');
+  input._id = shapeIntoMongoObjectId(input._id);
+  return await this.commentService.updateCommentByAdmin(input);
+}
 
 @Roles(MemberType.SUPER_ADMIN)
 @UseGuards(RolesGuard)

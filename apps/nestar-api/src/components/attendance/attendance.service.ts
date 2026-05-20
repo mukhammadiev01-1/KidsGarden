@@ -7,6 +7,7 @@ import { Direction, Message } from '../../libs/enums/common.enum';
 import { GroupStatus } from '../../libs/enums/group.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberType } from '../../libs/enums/member.enum';
+import { capPaginationLimit } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { Attendance, Attendances } from '../../libs/dto/attendance/attendance';
 import {
@@ -22,6 +23,8 @@ import { Member } from '../../libs/dto/member/member';
 
 @Injectable()
 export class AttendanceService {
+	private readonly attendanceListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('Attendance') private readonly attendanceModel: Model<Attendance>,
 		@InjectModel('Child') private readonly childModel: Model<Child>,
@@ -143,13 +146,14 @@ export class AttendanceService {
 	}
 
 	private async findAttendances(match: T, sort: T, page: number, limit: number): Promise<Attendances> {
+		const cappedLimit = capPaginationLimit(limit, this.attendanceListMaxLimit);
 		const result = await this.attendanceModel
 			.aggregate([
 				{ $match: match },
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+						list: [{ $skip: (page - 1) * cappedLimit }, { $limit: cappedLimit }],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

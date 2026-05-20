@@ -18,3 +18,14 @@ export class CommentUpdate {
 	@Field(() => String, { nullable: true })
 	commentContent?: string;
 }
+
+@InputType()
+export class CommentAdminUpdate {
+	@IsNotEmpty()
+	@Field(() => String)
+	_id: ObjectId;
+
+	@IsNotEmpty()
+	@Field(() => CommentStatus)
+	commentStatus: CommentStatus;
+}

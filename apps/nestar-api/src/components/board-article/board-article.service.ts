@@ -10,7 +10,7 @@ import {
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { MemberService } from '../member/member.service';
 import { ViewService } from '../view/view.service';
-import { BoardArticleStatus } from '../../libs/enums/board-article.enum';
+import { BoardArticleCategory, BoardArticleStatus } from '../../libs/enums/board-article.enum';
 import { ViewGroup } from '../../libs/enums/view.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { BoardArticleUpdate } from '../../libs/dto/board-article/board-article.update';
@@ -18,9 +18,14 @@ import { lookupAuthMemberLiked, lookupPublicMember, shapeIntoMongoObjectId } fro
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
+import { Member } from '../../libs/dto/member/member';
+import { MemberType } from '../../libs/enums/member.enum';
 
 @Injectable()
 export class BoardArticleService {
+	private readonly publicBoardArticleListMaxLimit = 50;
+	private readonly adminBoardArticleListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('BoardArticle') private readonly boardArticleModel: Model<BoardArticle>,
 		private readonly memberService: MemberService,
@@ -28,13 +33,14 @@ export class BoardArticleService {
 		private readonly likeService: LikeService,
 	) {}
 
-	public async createBoardArticle(memberId: ObjectId, input: BoardArticleInput): Promise<BoardArticle> {
-		input.memberId = memberId; // inputni memberIdsini kirib kelgan memberId bilan tenglashtiramiz, shunda article kim tomonidan yozilganini bilib olamiz
+	public async createBoardArticle(authMember: Member, input: BoardArticleInput): Promise<BoardArticle> {
+		this.validateBoardArticleCreatePermission(authMember, input.articleCategory);
+		input.memberId = authMember._id; // inputni memberIdsini kirib kelgan memberId bilan tenglashtiramiz, shunda article kim tomonidan yozilganini bilib olamiz
 		try {
 			const result = await this.boardArticleModel.create(input); //boardArticleschema modelimizni create static methodidan foydalanib yangi article yaratamiz va natijani kuttirib result ga tenglashtiramiz
 			await this.memberService.memberStatsEditor({
 				//memberService instancedan foydalanib memberStatsEditor methodidan foyadalanyabmiz
-				_id: memberId, // qaysi memberning statsini o'zgartirmoqchi ekanligimizni memberId orqali belgilaymiz
+				_id: authMember._id, // qaysi memberning statsini o'zgartirmoqchi ekanligimizni memberId orqali belgilaymiz
 				targetKey: 'memberArticles', // member schema ichida memberArticles degan field bor, biz shuni targetKey qilib beramiz, shunda memberStatsEditor methodi bilib oladiki memberArticles fieldini o'zgartirmoqchi
 				modifier: 1, // memberArticles fieldi number tipida va har safar yangi article yaratilganda 1 ga oshishi kerak, shuning uchun modifierga 1 beramiz, agar article o'chirilsa bu field 1 ga kamayishi kerak bo'ladi, shunda modifierga -1 beramiz
 			});
@@ -52,6 +58,7 @@ export class BoardArticleService {
 			//searrchiing object hosil qilyabmiz
 			_id: articleId, //biz ko'rmoqchi bo'lgan article ni id sini search objectiga "_id" keysi orqali beramiz
 			articleStatus: BoardArticleStatus.ACTIVE, //foyadalanuvchilar faqat ACTIVE statusdagi articlelarni ko'ra olishi kerak
+			articleCategory: { $in: [BoardArticleCategory.FREE, BoardArticleCategory.NEWS] },
 		};
 
 		const targetBoardArticle: BoardArticle = await this.boardArticleModel.findOne(search).lean().exec(); //boardArticleSchemaModelni static findOne methodini chaqiramiz va unga search objectini beramiz, lean() methodi query natijasini plain javascript objectiga o'zgartiradi, va execution qilyabmiz.
@@ -76,9 +83,10 @@ export class BoardArticleService {
 
 	public async updateBoardArticle(memberId: ObjectId, input: BoardArticleUpdate): Promise<BoardArticle> {
 		const { _id, articleStatus } = input; //destruction qilyabmiz
+		const update = this.shapeOwnerBoardArticleUpdate(input);
 
 		const result = await this.boardArticleModel
-			.findOneAndUpdate({ _id: _id, memberId: memberId, articleStatus: BoardArticleStatus.ACTIVE }, input, {
+			.findOneAndUpdate({ _id: _id, memberId: memberId, articleStatus: BoardArticleStatus.ACTIVE, articleCategory: BoardArticleCategory.FREE }, update, {
 				//3 ta argument pass qilyabmiz. Id va u murojaatchini ID si bilan va articleStatus ACTIVE bo'lishi shart //input bu biz o'zgartirmoqchi bo'lgan fieldlar va ularning yangi qiymatlari
 				new: true, //yangilangan documentni qaytaradi
 			})
@@ -100,11 +108,20 @@ export class BoardArticleService {
 
 	public async getBoardArticles(memberId: ObjectId, input: BoardArticlesInquiry): Promise<BoardArticles> {
 		const { articleCategory, text } = input.search; //destruction qilyabmiz
-		const match: T = { articleStatus: BoardArticleStatus.ACTIVE }; //mathc qilyabmiz, bunda articleStatus ACTIVE bo'lishi kerak
+		const limit = Math.min(input.limit, this.publicBoardArticleListMaxLimit);
+		const match: T = {
+			articleStatus: BoardArticleStatus.ACTIVE,
+			articleCategory: { $in: [BoardArticleCategory.FREE, BoardArticleCategory.NEWS] },
+		}; //mathc qilyabmiz, bunda articleStatus ACTIVE bo'lishi kerak
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC }; // standard sort qilyabmiz agar frontend dan sort va direction kelmasa, createdAt ga qarab DESC sort qilyabmiz
 
-		if (articleCategory) match.articleCategory = articleCategory; //articleCategory talab qilinsa, match objectiga articleCategory ni ham qo'shamiz
-		if (text) match.articleTitle = { $regex: new RegExp(text, 'i') }; // text bo'lsa regex orqali articleTitle da text bor-yo'qligini tekshiramiz, 'i' flagi case-insensitive qilyapti, ya'ni katta-kichik harflarga e'tibor bermay tekshiradi
+		if (articleCategory) {
+			if (![BoardArticleCategory.FREE, BoardArticleCategory.NEWS].includes(articleCategory)) {
+				throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+			}
+			match.articleCategory = articleCategory;
+		} //articleCategory talab qilinsa, match objectiga articleCategory ni ham qo'shamiz
+		if (text?.trim()) match.articleTitle = { $regex: new RegExp(this.escapeRegex(text.trim()), 'i') }; // text bo'lsa regex orqali articleTitle da text bor-yo'qligini tekshiramiz, 'i' flagi case-insensitive qilyapti, ya'ni katta-kichik harflarga e'tibor bermay tekshiradi
 		if (input.search?.memberId) {
 			// aynan bir memberning articlelarini ko'rsatish kerak bo'lsa, match objectiga memberId ni ham qo'shamiz, lekin frontend dan kelgan memberId ni MongoDB ning ObjectId tipiga o'zgartiramiz, chunki database da memberId lar ObjectId tipida saqlanadi
 			match.memberId = shapeIntoMongoObjectId(input.search.memberId);
@@ -118,8 +135,8 @@ export class BoardArticleService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (input.page - 1) * input.limit }, //list orqali pagination qilyabmiz
-							{ $limit: input.limit },
+							{ $skip: (input.page - 1) * limit }, //list orqali pagination qilyabmiz
+							{ $limit: limit },
 								lookupAuthMemberLiked(memberId), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 								lookupPublicMember,
 							{ $unwind: '$memberData' },
@@ -159,6 +176,7 @@ export class BoardArticleService {
 
 	public async getAllBoardArticlesByAdmin(input: AllBoardArticlesInquiry): Promise<BoardArticles> {
 		const { articleStatus, articleCategory } = input.search; //destruction qilyabmiz
+		const limit = Math.min(input.limit, this.adminBoardArticleListMaxLimit);
 		const match: T = {}; //searching object hosil qilyabmiz
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC }; // standard sort qilyabmiz, agar frontend dan sort va direction kelmasa, createdAt ga qarab DESC sort qilyabmiz
 
@@ -173,8 +191,8 @@ export class BoardArticleService {
 					$facet: {
 						//list orqali pagination qilyabmiz va metaCounter orqali total sonini qaytaryabmiz */
 						list: [
-							{ $skip: (input.page - 1) * input.limit },
-							{ $limit: input.limit },
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
 								lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
@@ -191,9 +209,10 @@ export class BoardArticleService {
 
 	public async updateBoardArticleByAdmin(input: BoardArticleUpdate): Promise<BoardArticle> {
 		const { _id, articleStatus } = input; //destruction qilyabmiz
+		const update = this.shapeAdminBoardArticleUpdate(input);
 
 		const result = await this.boardArticleModel //boardArticleSchemaModelimizni static findOneAndUpdate methodini chaqiramiz va unga 3 ta argument pass qilyabmiz
-			.findOneAndUpdate({ _id: _id, articleStatus: BoardArticleStatus.ACTIVE }, input, {
+			.findOneAndUpdate({ _id: _id, articleStatus: BoardArticleStatus.ACTIVE }, update, {
 				//birinchisi search objecti, bunda article ning _id si va articleStatus ACTIVE bo'lishi shart, ikkinchisi input bu biz o'zgartirmoqchi bo'lgan fieldlar va ularning yangi qiymatlari
 				new: true, // uchinchisi options, bunda new: true ni beramiz, shunda yangilangan document qaytadi
 			})
@@ -232,5 +251,54 @@ export class BoardArticleService {
 				},
 			)
 			.exec();
+	}
+
+	private validateBoardArticleCreatePermission(authMember: Member, articleCategory: BoardArticleCategory): void {
+		if ([BoardArticleCategory.HUMOR, BoardArticleCategory.RECOMMEND].includes(articleCategory)) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		if (authMember.memberType === MemberType.PARENT) {
+			if (articleCategory !== BoardArticleCategory.FREE) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+			return;
+		}
+
+		if (authMember.memberType === MemberType.SUPER_ADMIN) {
+			if (![BoardArticleCategory.FREE, BoardArticleCategory.NEWS].includes(articleCategory)) {
+				throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+			}
+			return;
+		}
+
+		throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+	}
+
+	private shapeOwnerBoardArticleUpdate(input: BoardArticleUpdate): Partial<BoardArticleUpdate> {
+		const allowedFields = ['_id', 'articleStatus', 'articleTitle', 'articleContent', 'articleImage'];
+		const unknownFields = Object.keys(input).filter((key) => !allowedFields.includes(key));
+		if (unknownFields.length) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		const update = {
+			...(input.articleStatus ? { articleStatus: input.articleStatus } : {}),
+			...(input.articleTitle ? { articleTitle: input.articleTitle } : {}),
+			...(input.articleContent ? { articleContent: input.articleContent } : {}),
+			...(input.articleImage ? { articleImage: input.articleImage } : {}),
+		};
+		if (!Object.keys(update).length) throw new BadRequestException(Message.BAD_REQUEST);
+
+		return update;
+	}
+
+	private shapeAdminBoardArticleUpdate(input: BoardArticleUpdate): Partial<BoardArticleUpdate> {
+		const allowedFields = ['_id', 'articleStatus'];
+		const unknownFields = Object.keys(input).filter((key) => !allowedFields.includes(key));
+		if (unknownFields.length) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		if (!input.articleStatus) throw new BadRequestException(Message.BAD_REQUEST);
+
+		return { articleStatus: input.articleStatus };
+	}
+
+	private escapeRegex(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 }

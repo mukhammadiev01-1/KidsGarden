@@ -25,14 +25,21 @@ import { StatisticModifier, T } from '../../libs/types/common';
 import { ViewService } from '../view/view.service';
 import { ViewGroup } from '../../libs/enums/view.enum';
 import { LikeService } from '../like/like.service';
-import { LikeInput } from '../../libs/dto/like/like.input';
-import { LikeGroup } from '../../libs/enums/like.enum';
 import { Follower, Following, MeFollowed } from '../../libs/dto/follow/follow';
-import { memberPreviewProjection, publicMemberProjection, shapeIntoMongoObjectId } from '../../libs/config';
+import {
+	capPaginationLimit,
+	escapeRegex,
+	memberPreviewProjection,
+	publicMemberProjection,
+	shapeIntoMongoObjectId,
+} from '../../libs/config';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 
 @Injectable()
 export class MemberService {
+	private readonly kindergartenAdminsListMaxLimit = 50;
+	private readonly adminMemberListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
@@ -152,8 +159,9 @@ export class MemberService {
 
 		const match: T = { memberType: MemberType.KINDERGARTEN_ADMIN, memberStatus: MemberStatus.ACTIVE };
 		const sort: T = { [input.sort ?? 'createdAt']: input.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.kindergartenAdminsListMaxLimit);
 
-		if (text) match.memberNick = { $regex: new RegExp(text, 'i') };
+		if (text) match.memberNick = { $regex: new RegExp(escapeRegex(text), 'i') };
 		console.log('match:', match);
 
 		const result = await this.memberModel
@@ -163,8 +171,8 @@ export class MemberService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (input.page - 1) * input.limit },
-							{ $limit: input.limit },
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
 							{ $project: publicMemberProjection },
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -245,22 +253,8 @@ export class MemberService {
 		throw new BadRequestException(Message.BAD_REQUEST);
 	}
 
-	public async likeTargetMember(memberId: ObjectId, likeRefId: ObjectId): Promise<Member> {
-		const target: Member = await this.memberModel.findOne({ _id: likeRefId, memberStatus: MemberStatus.ACTIVE });
-		if (!target) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-
-		const input: LikeInput = {
-			memberId: memberId,
-			likeRefId: likeRefId,
-			likeGroup: LikeGroup.MEMBER,
-		};
-
-		// LIKE TOGGLE via Like modules
-		const modifier: number = await this.likeService.toggleLike(input);
-		const result = await this.memberStatsEditor({ _id: likeRefId, targetKey: 'memberLikes', modifier: modifier });
-
-		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
-		return result;
+	public async likeTargetMember(_memberId: ObjectId, _likeRefId: ObjectId): Promise<Member> {
+		throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 	}
 
 	public async getAllMembersByAdmin(input: MembersInquiry): Promise<Members> {
@@ -268,10 +262,12 @@ export class MemberService {
 
 		const match: T = {};
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = Math.min(input.limit, this.adminMemberListMaxLimit);
+		const skip = (input.page - 1) * limit;
 
 		if (memberStatus) match.memberStatus = memberStatus; // memberStatus ga ko'ra filterlash, agar memberStatus bo'lsa match obyektiga memberStatus ni qo'shadi
 		if (memberType) match.memberType = memberType; // memberType ga ko'ra filterlash, agar memberType bo'lsa match obyektiga memberType ni qo'shadi
-		if (text) match.memberNick = { $regex: new RegExp(text, 'i') }; // memberNick ni text ga regex orqali tekshiradi, 'i' flagi case-insensitive qidiruvni ta'minlaydi, ya'ni katta-kichik harflarga e'tibor bermaydi
+		if (text) match.memberNick = { $regex: new RegExp(this.escapeRegex(text), 'i') }; // memberNick ni text ga regex orqali tekshiradi, 'i' flagi case-insensitive qidiruvni ta'minlaydi, ya'ni katta-kichik harflarga e'tibor bermaydi
 
 		console.log('match:', match);
 
@@ -283,7 +279,7 @@ export class MemberService {
 				{
 					$facet: {
 						// $facet stage ni ishlatish orqali pagination va total count ni bir vaqtda olish mumkin bo'ladi, chunki $facet ichida har bir stage o'z ishini bajaradi va natijani alohida array sifatida qaytaradi
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }], // pagination uchun $skip va $limit stage larini ishlatadi, bu yerda page va limit ni input dan oladi, skip stage ni ishlatish orqali kerakli sahifaga o'tish mumkin bo'ladi, limit stage ni ishlatish orqali har bir sahifada nechta member ko'rsatilishini belgilaydi
+						list: [{ $skip: skip }, { $limit: limit }, { $project: { memberPassword: 0 } }], // pagination uchun $skip va $limit stage larini ishlatadi, bu yerda page va limit ni input dan oladi, skip stage ni ishlatish orqali kerakli sahifaga o'tish mumkin bo'ladi, limit stage ni ishlatish orqali har bir sahifada nechta member ko'rsatilishini belgilaydi
 						metaCounter: [{ $count: 'total' }], // total count ni olish uchun $count stage ni ishlatadi, bu yerda total deb nomlangan field da jami memberlar soni saqlanadi, bu metaCounter array ichida bo'ladi va bizga pagination uchun kerak bo'ladi, chunki frontend da jami sahifalar sonini hisoblash uchun total count kerak bo'ladi
 					},
 				},
@@ -295,12 +291,39 @@ export class MemberService {
 		return result[0]; // aggregate natijasi har doim array bo'ladi, bizga esa list va metaCounter kerak, shuning uchun result[0] ni qaytaramiz, bu yerda result[0].list va result[0].metaCounter mavjud bo'ladi
 	}
 
-	public async updateMemberByAdmin(input: MemberUpdate): Promise<Member> {
-		const result: Member = await this.memberModel.findOneAndUpdate({ _id: input._id }, input, { new: true }).exec();
+	public async updateMemberByAdmin(input: MemberUpdate, authMember: Member): Promise<Member> {
+		const targetId = shapeIntoMongoObjectId(input._id);
+		const update = this.shapeAdminUpdateInput(input, authMember);
+		const result: Member = await this.memberModel.findOneAndUpdate({ _id: targetId }, update, { new: true }).exec();
 
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 
 		return result;
+	}
+
+	private shapeAdminUpdateInput(input: MemberUpdate, authMember: Member): Pick<MemberUpdate, 'memberStatus'> {
+		const allowedFields: (keyof MemberUpdate)[] = ['memberStatus'];
+		const allowedFieldSet = new Set<string>(allowedFields);
+		const inputKeys = Object.keys(input).filter((key) => key !== '_id');
+		const blockedFields = inputKeys.filter((key) => !allowedFieldSet.has(key));
+
+		if (blockedFields.length) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		if (!input.memberStatus) throw new BadRequestException(Message.BAD_REQUEST);
+		if (!Object.values(MemberStatus).includes(input.memberStatus)) throw new BadRequestException(Message.BAD_REQUEST);
+
+		const targetId = shapeIntoMongoObjectId(input._id);
+		const authMemberId = shapeIntoMongoObjectId(authMember._id);
+		const isSelfUpdate = targetId.toString() === authMemberId.toString();
+
+		if (isSelfUpdate && input.memberStatus !== MemberStatus.ACTIVE) {
+			throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+		}
+
+		return { memberStatus: input.memberStatus };
+	}
+
+	private escapeRegex(text: string): string {
+		return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 
 	public async memberStatsEditor(input: StatisticModifier): Promise<Member> {

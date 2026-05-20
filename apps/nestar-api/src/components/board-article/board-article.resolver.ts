@@ -12,6 +12,7 @@ import { BoardArticleUpdate } from '../../libs/dto/board-article/board-article.u
 import { MemberType } from '../../libs/enums/member.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { Member } from '../../libs/dto/member/member';
 
 @Resolver()
 export class BoardArticleResolver {
@@ -21,10 +22,10 @@ export class BoardArticleResolver {
   @Mutation((returns) => BoardArticle) // bu mutation graphql API hisoblanadi va BoardArticle tipida data qaytaradi
   public async createBoardArticle( 
     @Args('input') input: BoardArticleInput, // frontend dan keladigan input ma'lumotlari BoardArticleInput tipida bo'ladi
-    @AuthMember('_id') memberId: ObjectId, // Auth bo'lgan memberning _id sini AuthMember decorator orqali olamiz
+    @AuthMember() authMember: Member, // Auth bo'lgan memberni AuthMember decorator orqali olamiz
   ): Promise<BoardArticle> { //Promiseda BoardArticle tipida data qaytaradi
     console.log('Mutation: createBoardArticle');
-    return await this.boardArticleService.createBoardArticle(memberId, input); //boardarticleservice instance dan createBoardArticle methodini chaqiramiz va unga memberId va inputni argument sifatida beramiz, natijani kuttiramiz va qaytaramiz
+    return await this.boardArticleService.createBoardArticle(authMember, input); //boardarticleservice instance dan createBoardArticle methodini chaqiramiz va unga authMember va inputni argument sifatida beramiz, natijani kuttiramiz va qaytaramiz
   }
 
   @UseGuards(WithoutGuard) // Auth bo'lmagan memberlar ham bo'lganlarham kirishi mumkin, shuning uchun WithoutGuard chaqirdik

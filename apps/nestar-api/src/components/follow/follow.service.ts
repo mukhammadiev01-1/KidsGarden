@@ -7,6 +7,7 @@ import { Direction, Message } from '../../libs/enums/common.enum';
 import {
 	lookupAuthMemberFollowed,
 	lookupAuthMemberLiked,
+	capPaginationLimit,
 	lookupPublicFollowerData,
 	lookupPublicFollowingData,
 } from '../../libs/config';
@@ -15,6 +16,8 @@ import { T } from '../../libs/types/common';
 
 @Injectable()
 export class FollowService {
+	private readonly followListMaxLimit = 50;
+
 	constructor(
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
 		private readonly memberService: MemberService,
@@ -67,6 +70,7 @@ export class FollowService {
 
 	public async getMemberFollowings(memberId: ObjectId, input: FollowInquiry): Promise<Followings> {
 		const { page, limit, search } = input; // destructing input object to get page, limit and search parameters
+		const cappedLimit = capPaginationLimit(limit, this.followListMaxLimit);
 		if (!search?.followerId) throw new InternalServerErrorException(Message.BAD_REQUEST);
 		const match: T = { followerId: search?.followerId }; // followerId bo'yicha obunalarni qidirish uchun match obyekti yaratamiz, bu MongoDB aggregate pipeline da ishlatiladi
 		console.log('match:', match);
@@ -80,11 +84,11 @@ export class FollowService {
 					$facet: {
 						// facet operatori bilan ikkita parallel pipeline yaratamiz, biri list uchun, ikkinchisi metaCounter uchun
 						list: [
-							{ $skip: (page - 1) * limit }, // masalan agar page 2 bo'lsa va limit 10 bo'lsa, biz birinchi 10 obunani o'tkazib yuboramiz va keyingi 10 obunani olamiz
-							{ $limit: limit }, // limit ga muvofiq obunalarni cheklaymiz, masalan limit 10 bo'lsa, faqat 10 obunani olamiz
+							{ $skip: (page - 1) * cappedLimit }, // masalan agar page 2 bo'lsa va limit 10 bo'lsa, biz birinchi 10 obunani o'tkazib yuboramiz va keyingi 10 obunani olamiz
+							{ $limit: cappedLimit }, // limit ga muvofiq obunalarni cheklaymiz, masalan limit 10 bo'lsa, faqat 10 obunani olamiz
 							lookupAuthMemberLiked(memberId, '$followingId'), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 							lookupAuthMemberFollowed({ followerId: memberId, followingId: '$followingId' }), // followerId chunki
-								lookupPublicFollowingData,
+							lookupPublicFollowingData,
 							{ $unwind: '$followingData' }, //array into object
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -100,6 +104,7 @@ export class FollowService {
 
 	public async getMemberFollowers(memberId: ObjectId, input: FollowInquiry): Promise<Followers> {
 		const { page, limit, search } = input;
+		const cappedLimit = capPaginationLimit(limit, this.followListMaxLimit);
 		if (!search?.followingId) throw new InternalServerErrorException(Message.BAD_REQUEST);
 
 		const match: T = { followingId: search?.followingId };
@@ -112,11 +117,11 @@ export class FollowService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (page - 1) * limit },
-							{ $limit: limit },
+							{ $skip: (page - 1) * cappedLimit },
+							{ $limit: cappedLimit },
 							lookupAuthMemberLiked(memberId, '$followerId'), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 							lookupAuthMemberFollowed({ followerId: memberId, followingId: '$followerId' }), //
-								lookupPublicFollowerData,
+							lookupPublicFollowerData,
 							{ $unwind: '$followerData' },
 						],
 						metaCounter: [{ $count: 'total' }],

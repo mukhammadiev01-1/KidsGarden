@@ -15,9 +15,12 @@ import {
 	StaffCandidatesInquiry,
 } from '../../libs/dto/kindergarten-staff/kindergarten-staff.input';
 import { KindergartenStaffUpdate } from '../../libs/dto/kindergarten-staff/kindergarten-staff.update';
+import { capPaginationLimit, escapeRegex } from '../../libs/config';
 
 @Injectable()
 export class KindergartenStaffService {
+	private readonly kindergartenStaffListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
@@ -72,6 +75,7 @@ export class KindergartenStaffService {
 		const match: T = {};
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
 		const { kindergartenId, memberId, staffRole, staffStatus } = input.search;
+		const limit = capPaginationLimit(input.limit, this.kindergartenStaffListMaxLimit);
 
 		if (kindergartenId) match.kindergartenId = kindergartenId;
 		if (memberId) match.memberId = memberId;
@@ -89,7 +93,7 @@ export class KindergartenStaffService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -137,7 +141,7 @@ export class KindergartenStaffService {
 			.lean()
 			.exec();
 		const linkedMemberIds = linkedStaff.map((staff) => staff.memberId);
-		const safeRegex = new RegExp(this.escapeRegex(searchText), 'i');
+		const safeRegex = new RegExp(escapeRegex(searchText), 'i');
 		const match: T = {
 			memberStatus: MemberStatus.ACTIVE,
 			memberType: { $in: memberTypes },
@@ -226,7 +230,4 @@ export class KindergartenStaffService {
 		if (staffRole === StaffRole.OWNER) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 	}
 
-	private escapeRegex(value: string): string {
-		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	}
 }

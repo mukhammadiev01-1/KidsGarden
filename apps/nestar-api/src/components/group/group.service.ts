@@ -15,9 +15,12 @@ import { GroupUpdate } from '../../libs/dto/group/group.update';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
+import { capPaginationLimit, escapeRegex } from '../../libs/config';
 
 @Injectable()
 export class GroupService {
+	private readonly groupsListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('Child') private readonly childModel: Model<Child>,
 		@InjectModel('Group') private readonly groupModel: Model<Group>,
@@ -72,11 +75,12 @@ export class GroupService {
 		const match: T = {};
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
 		const { kindergartenId, teacherId, groupStatus, text } = input.search;
+		const limit = capPaginationLimit(input.limit, this.groupsListMaxLimit);
 
 		if (kindergartenId) match.kindergartenId = kindergartenId;
 		if (teacherId) match.teacherIds = teacherId;
 		if (groupStatus) match.groupStatus = groupStatus;
-		if (text) match.groupName = { $regex: new RegExp(text, 'i') };
+		if (text) match.groupName = { $regex: new RegExp(escapeRegex(text), 'i') };
 
 		if (authMember.memberType === MemberType.KINDERGARTEN_ADMIN) {
 			if (!kindergartenId) throw new BadRequestException(Message.BAD_REQUEST);
@@ -91,7 +95,7 @@ export class GroupService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

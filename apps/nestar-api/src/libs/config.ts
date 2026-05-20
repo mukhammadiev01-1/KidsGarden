@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { ObjectId } from 'bson';
 
 export const availableKindergartenAdminSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews', 'memberRank'];
@@ -19,6 +20,7 @@ export const availableCommentSorts = ['createdAt', 'updatedAt'];
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { T } from './types/common';
+import { Message } from './enums/common.enum';
 import { MemberStatus } from './enums/member.enum';
 
 export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg'];
@@ -27,8 +29,35 @@ export const getSerialForImage = (filename: string) => {
 	return uuidv4() + ext;
 };
 
+export const escapeRegex = (text: string): string => {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+export const capPaginationLimit = (limit: number, maxLimit: number): number => {
+	const numericLimit = Number(limit);
+	if (!Number.isFinite(numericLimit)) return maxLimit;
+
+	return Math.min(Math.max(numericLimit, 1), maxLimit);
+};
+
 export const shapeIntoMongoObjectId = (target: any) => {
-	return typeof target === 'string' ? new ObjectId(target) : target;
+	if (!target) throw new BadRequestException(Message.BAD_REQUEST);
+	if (typeof target === 'string') {
+		if (!ObjectId.isValid(target)) throw new BadRequestException(Message.BAD_REQUEST);
+		return new ObjectId(target);
+	}
+
+	if (
+		target instanceof ObjectId ||
+		(typeof target === 'object' &&
+			target?._bsontype === 'ObjectId' &&
+			typeof target.toHexString === 'function' &&
+			ObjectId.isValid(target.toHexString()))
+	) {
+		return target;
+	}
+
+	throw new BadRequestException(Message.BAD_REQUEST);
 };
 
 export const lookupAuthMemberLiked = (memberId: T, targetRefId: string = '$_id') => {

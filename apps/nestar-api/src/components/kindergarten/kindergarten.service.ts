@@ -17,7 +17,13 @@ import { ViewGroup } from '../../libs/enums/view.enum';
 import { ViewService } from '../view/view.service';
 import moment from 'moment';
 import { KindergartenUpdate } from '../../libs/dto/kindergarten/kindergarten.update';
-import { lookupAuthMemberLiked, lookupPublicMember, shapeIntoMongoObjectId } from '../../libs/config';
+import {
+	capPaginationLimit,
+	escapeRegex,
+	lookupAuthMemberLiked,
+	lookupPublicMember,
+	shapeIntoMongoObjectId,
+} from '../../libs/config';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
@@ -26,6 +32,10 @@ import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum
 
 @Injectable()
 export class KindergartenService {
+	private readonly publicKindergartenListMaxLimit = 50;
+	private readonly ownerKindergartenListMaxLimit = 100;
+	private readonly adminKindergartenListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
@@ -115,6 +125,7 @@ export class KindergartenService {
 	public async getKindergartens(memberId: ObjectId, input: KindergartensInquiry): Promise<Kindergartens> {
 		const match: T = { kindergartenStatus: KindergartenStatus.ACTIVE };
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.publicKindergartenListMaxLimit);
 
 		this.shapeMatchQuery(match, input);
 		console.log('match:', match);
@@ -127,8 +138,8 @@ export class KindergartenService {
 					$facet: {
 						// $facet operatori, bu yerda list va metaCounter ni o'z ichiga olgan obyekti qaytaradi, list mulklarni pagination bilan qaytaradi va metaCounter esa total mulk sonini hisoblaydi
 						list: [
-							{ $skip: (input.page - 1) * input.limit },
-							{ $limit: input.limit },
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
 							lookupAuthMemberLiked(memberId), // lookupAuthMemberLiked metodi, bu yerda memberId ni pass qilyabmiz, bu mulklarni like qilish imkoniyatini tekshirish uchun ishlatiladi, bu yerda memberId asosida mulklarni like qilgan yoki qilmaganligini tekshiradi va natijani meLiked field ga qo'shadi
 							lookupPublicMember,
 							{ $unwind: '$memberData' }, // $unwind esa memberData ni array dan object ga o'zgartiradi
@@ -168,8 +179,7 @@ export class KindergartenService {
 		if (periodsRange) match.createdAt = { $gte: periodsRange.start, $lte: periodsRange.end };
 		if (capacityRange) match.kindergartenCapacity = { $gte: capacityRange.start, $lte: capacityRange.end };
 
-		if (text) match.kindergartenTitle = { $regex: new RegExp(text, 'i') };
-
+		if (text) match.kindergartenTitle = { $regex: new RegExp(escapeRegex(text), 'i') };
 	}
 
 	public async getFavorites(memberId: ObjectId, input: OrdinaryInquiry): Promise<Kindergartens> {
@@ -190,6 +200,7 @@ export class KindergartenService {
 		};
 
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.ownerKindergartenListMaxLimit);
 
 		const result = await this.kindergartenModel
 			.aggregate([
@@ -198,8 +209,8 @@ export class KindergartenService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (input.page - 1) * input.limit },
-							{ $limit: input.limit },
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
 							lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
@@ -237,6 +248,8 @@ export class KindergartenService {
 		const { kindergartenStatus, kindergartenLocationList } = input.search;
 		const match: T = {};
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.adminKindergartenListMaxLimit);
+		const skip = (input.page - 1) * limit;
 
 		if (kindergartenStatus) match.kindergartenStatus = kindergartenStatus;
 		if (kindergartenLocationList) match.kindergartenLocation = { $in: kindergartenLocationList };
@@ -248,9 +261,9 @@ export class KindergartenService {
 				{
 					$facet: {
 						list: [
-							{ $skip: (input.page - 1) * input.limit }, // pagination uchun $skip operatori, bu yerda (input.page - 1) * input.limit ni skip qiladi, bu sayfa numarasına göre doğru kayıtları getirir
-							{ $limit: input.limit },
-								lookupPublicMember,
+							{ $skip: skip }, // pagination uchun $skip operatori, bu yerda (input.page - 1) * input.limit ni skip qiladi, bu sayfa numarasına göre doğru kayıtları getirir
+							{ $limit: limit },
+							lookupPublicMember,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -265,19 +278,17 @@ export class KindergartenService {
 	}
 
 	public async updateKindergartenByAdmin(input: KindergartenUpdate): Promise<Kindergarten> {
-		let { kindergartenStatus, deletedAt } = input;
+		const { kindergartenStatus, deletedAt } = this.shapeAdminKindergartenUpdateInput(input);
 		const search: T = {
 			_id: input._id,
 			kindergartenStatus: KindergartenStatus.ACTIVE,
 		};
 
-		if (kindergartenStatus === KindergartenStatus.DELETE) {
-			deletedAt = moment().toDate();
-			input.deletedAt = deletedAt;
-		}
+		const update: Partial<KindergartenUpdate> = { kindergartenStatus };
+		if (deletedAt) update.deletedAt = deletedAt;
 
 		const result = await this.kindergartenModel
-			.findOneAndUpdate(search, input, {
+			.findOneAndUpdate(search, update, {
 				new: true,
 			})
 			.exec();
@@ -293,6 +304,29 @@ export class KindergartenService {
 		}
 
 		return result;
+	}
+
+	private shapeAdminKindergartenUpdateInput(input: KindergartenUpdate): Partial<KindergartenUpdate> {
+		const allowedFields: (keyof KindergartenUpdate)[] = ['kindergartenStatus'];
+		const allowedFieldSet = new Set<string>(allowedFields);
+		const inputKeys = Object.keys(input).filter((key) => key !== '_id');
+		const blockedFields = inputKeys.filter((key) => !allowedFieldSet.has(key));
+
+		if (blockedFields.length) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		if (!input.kindergartenStatus) throw new BadRequestException(Message.BAD_REQUEST);
+		if (!Object.values(KindergartenStatus).includes(input.kindergartenStatus)) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		const update: Partial<KindergartenUpdate> = {
+			kindergartenStatus: input.kindergartenStatus,
+		};
+
+		if (input.kindergartenStatus === KindergartenStatus.DELETE) {
+			update.deletedAt = moment().toDate();
+		}
+
+		return update;
 	}
 
 	public async removeKindergartenByAdmin(kindergartenId: ObjectId): Promise<Kindergarten> {

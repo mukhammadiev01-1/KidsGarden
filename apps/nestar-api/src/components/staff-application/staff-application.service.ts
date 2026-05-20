@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { Direction, Message } from '../../libs/enums/common.enum';
-import { memberPreviewProjection } from '../../libs/config';
+import { capPaginationLimit, memberPreviewProjection } from '../../libs/config';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
@@ -20,6 +20,8 @@ import {
 
 @Injectable()
 export class StaffApplicationService {
+	private readonly staffApplicationsListMaxLimit = 100;
+
 	constructor(
 		@InjectModel('StaffApplication') private readonly staffApplicationModel: Model<StaffApplication>,
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
@@ -199,9 +201,10 @@ export class StaffApplicationService {
 		includeApplicantData = false,
 	): Promise<StaffApplications> {
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const limit = capPaginationLimit(input.limit, this.staffApplicationsListMaxLimit);
 		const listPipeline: PipelineStage.FacetPipelineStage[] = [
-			{ $skip: (input.page - 1) * input.limit },
-			{ $limit: input.limit },
+			{ $skip: (input.page - 1) * limit },
+			{ $limit: limit },
 		];
 
 		if (includeApplicantData) {

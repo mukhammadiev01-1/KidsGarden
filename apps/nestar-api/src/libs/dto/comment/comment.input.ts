@@ -1,7 +1,7 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
 import { IsIn, IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
 import type { ObjectId } from 'mongoose';
-import { CommentGroup } from '../../enums/comment.enum';
+import { CommentGroup, CommentStatus } from '../../enums/comment.enum';
 import { Direction } from '../../enums/common.enum';
 import { availableCommentSorts } from '../../config';
 
@@ -54,4 +54,49 @@ export class CommentsInquiry {
 	@IsNotEmpty()
 	@Field(() => CISearch)
 	search: CISearch;
+}
+
+@InputType()
+class ACISearch {
+	@IsOptional()
+	@Field(() => CommentStatus, { nullable: true })
+	commentStatus?: CommentStatus;
+
+	@IsOptional()
+	@Field(() => CommentGroup, { nullable: true })
+	commentGroup?: CommentGroup;
+
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	commentRefId?: ObjectId;
+
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	memberId?: ObjectId;
+}
+
+@InputType()
+export class AdminCommentsInquiry {
+	@IsNotEmpty()
+	@Min(1)
+	@Field(() => Int)
+	page: number;
+
+	@IsNotEmpty()
+	@Min(1)
+	@Field(() => Int)
+	limit: number;
+
+	@IsOptional()
+	@IsIn(availableCommentSorts)
+	@Field(() => String, { nullable: true })
+	sort?: string;
+
+	@IsOptional()
+	@Field(() => Direction, { nullable: true })
+	direction?: Direction;
+
+	@IsNotEmpty()
+	@Field(() => ACISearch)
+	search: ACISearch;
 }
