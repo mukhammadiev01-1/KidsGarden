@@ -127,8 +127,9 @@ public async getMember(
   return await this.memberService.getMember(memberId, targetId);
 }
 
-@UseGuards(WithoutGuard) // without guard bu yerda ishlatilgan, chunki bu query ni auth qilmasdan ham ishlatish mumkin, lekin authMember dekoratori orqali memberId ni olish mumkin, agar auth qilinsa
-@Query(() => PublicMembers) // getKindergartenAdmins query si kindergarten adminlarni olish uchun ishlatiladi, bu yerda auth qilmasdan
+@Roles(MemberType.SUPER_ADMIN)
+@UseGuards(RolesGuard)
+@Query(() => PublicMembers)
 public async getKindergartenAdmins(
   @Args('input') input: KindergartenAdminsInquiry,
   @AuthMember('_id') memberId: ObjectId,

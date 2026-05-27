@@ -15,7 +15,7 @@ export class WithoutGuard implements CanActivate {
 			if (bearerToken) {
 				try {
 					const token = bearerToken.split(' ')[1],
-						authMember = await this.authService.verifyToken(token);
+						authMember = await this.authService.authenticateToken(token);
 					request.body.authMember = authMember;
 				} catch (err) {
 					request.body.authMember = null;

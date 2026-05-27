@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, ObjectId } from 'mongoose';
 import { Kindergartens, Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import {
@@ -29,6 +29,7 @@ import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
+import { Member } from '../../libs/dto/member/member';
 
 @Injectable()
 export class KindergartenService {
@@ -39,29 +40,52 @@ export class KindergartenService {
 	constructor(
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
+		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectConnection() private readonly connection: Connection,
 		private memberService: MemberService,
 		private viewService: ViewService,
 		private likeService: LikeService,
 	) {}
 
 	public async createKindergarten(input: KindergartenInput): Promise<Kindergarten> {
+		const session = await this.connection.startSession();
+
 		try {
-			const result = await this.kindergartenModel.create(input);
-			await this.kindergartenStaffModel.create({
-				kindergartenId: result._id,
-				memberId: result.memberId,
-				staffRole: StaffRole.OWNER,
-				staffStatus: StaffStatus.ACTIVE,
+			const result = await session.withTransaction(async () => {
+				const [kindergarten] = await this.kindergartenModel.create([input], { session });
+				await this.kindergartenStaffModel.create(
+					[
+						{
+							kindergartenId: kindergarten._id,
+							memberId: kindergarten.memberId,
+							staffRole: StaffRole.OWNER,
+							staffStatus: StaffStatus.ACTIVE,
+						},
+					],
+					{ session },
+				);
+				const updatedMember = await this.memberModel
+					.findByIdAndUpdate(
+						kindergarten.memberId,
+						{ $inc: { memberKindergartens: 1 } },
+						{
+							new: true,
+							session,
+						},
+					)
+					.exec();
+				if (!updatedMember) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+				return kindergarten;
 			});
-			await this.memberService.memberStatsEditor({
-				_id: result.memberId,
-				targetKey: 'memberKindergartens',
-				modifier: 1,
-			});
+
+			if (!result) throw new InternalServerErrorException(Message.CREATE_FAILED);
 			return result;
 		} catch (err) {
 			console.log('Error, Service.model:', err.message);
 			throw new BadRequestException(Message.CREATE_FAILED);
+		} finally {
+			await session.endSession();
 		}
 	}
 
@@ -187,7 +211,7 @@ export class KindergartenService {
 	}
 
 	public async getVisited(memberId: ObjectId, input: OrdinaryInquiry): Promise<Kindergartens> {
-		return await this.likeService.getFavoriteKindergartens(memberId, input);
+		return await this.viewService.getVisitedKindergartens(memberId, input);
 	}
 
 	public async getOwnerKindergartens(memberId: ObjectId, input: OwnerKindergartensInquiry): Promise<Kindergartens> {

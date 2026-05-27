@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId, PipelineStage } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, ObjectId, PipelineStage } from 'mongoose';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { capPaginationLimit, memberPreviewProjection } from '../../libs/config';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
@@ -27,6 +27,7 @@ export class StaffApplicationService {
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectConnection() private readonly connection: Connection,
 	) {}
 
 	public async createStaffApplication(authMember: Member, input: StaffApplicationInput): Promise<StaffApplication> {
@@ -101,66 +102,84 @@ export class StaffApplicationService {
 		authMember: Member,
 		input: StaffApplicationReviewInput,
 	): Promise<StaffApplication> {
-		const application = await this.validatePendingReviewApplication(authMember, input._id);
-		const applicant = await this.memberModel
-			.findOne({
-				_id: application.applicantId,
-				memberStatus: MemberStatus.ACTIVE,
-			})
-			.exec();
-		if (!applicant) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		const session = await this.connection.startSession();
 
-		if (![MemberType.PARENT, MemberType.TEACHER].includes(applicant.memberType)) {
-			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
-		}
+		try {
+			const result = await session.withTransaction(async () => {
+				const application = await this.validatePendingReviewApplication(authMember, input._id, session);
+				const applicant = await this.memberModel
+					.findOne({
+						_id: application.applicantId,
+						memberStatus: MemberStatus.ACTIVE,
+					})
+					.session(session)
+					.exec();
+				if (!applicant) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
-		const existingStaff = await this.kindergartenStaffModel
-			.findOne({ kindergartenId: application.kindergartenId, memberId: application.applicantId })
-			.exec();
+				if (![MemberType.PARENT, MemberType.TEACHER].includes(applicant.memberType)) {
+					throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+				}
 
-		if (existingStaff && existingStaff.staffStatus !== StaffStatus.REMOVED) {
-			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
-		}
+				const existingStaff = await this.kindergartenStaffModel
+					.findOne({ kindergartenId: application.kindergartenId, memberId: application.applicantId })
+					.session(session)
+					.exec();
 
-		if (applicant.memberType === MemberType.PARENT) {
-			const updatedApplicant = await this.memberModel
-				.findByIdAndUpdate(applicant._id, { memberType: MemberType.TEACHER }, { new: true })
-				.exec();
-			if (!updatedApplicant) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-		}
+				if (existingStaff && existingStaff.staffStatus !== StaffStatus.REMOVED) {
+					throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+				}
 
-		if (!existingStaff) {
-			await this.kindergartenStaffModel.create({
-				kindergartenId: application.kindergartenId,
-				memberId: application.applicantId,
-				staffRole: StaffRole.TEACHER,
-				staffStatus: StaffStatus.ACTIVE,
+				if (applicant.memberType === MemberType.PARENT) {
+					const updatedApplicant = await this.memberModel
+						.findByIdAndUpdate(applicant._id, { memberType: MemberType.TEACHER }, { new: true, session })
+						.exec();
+					if (!updatedApplicant) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+				}
+
+				if (!existingStaff) {
+					await this.kindergartenStaffModel.create(
+						[
+							{
+								kindergartenId: application.kindergartenId,
+								memberId: application.applicantId,
+								staffRole: StaffRole.TEACHER,
+								staffStatus: StaffStatus.ACTIVE,
+							},
+						],
+						{ session },
+					);
+				} else if (existingStaff.staffStatus === StaffStatus.REMOVED) {
+					const reactivatedStaff = await this.kindergartenStaffModel
+						.findByIdAndUpdate(
+							existingStaff._id,
+							{ staffRole: StaffRole.TEACHER, staffStatus: StaffStatus.ACTIVE },
+							{ new: true, session },
+						)
+						.exec();
+					if (!reactivatedStaff) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+				}
+
+				const approvedApplication = await this.staffApplicationModel
+					.findByIdAndUpdate(
+						application._id,
+						{
+							applicationStatus: StaffApplicationStatus.APPROVED,
+							reviewedBy: authMember._id,
+							reviewedAt: new Date(),
+						},
+						{ new: true, session },
+					)
+					.exec();
+				if (!approvedApplication) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+				return approvedApplication;
 			});
-		} else if (existingStaff.staffStatus === StaffStatus.REMOVED) {
-			const reactivatedStaff = await this.kindergartenStaffModel
-				.findByIdAndUpdate(
-					existingStaff._id,
-					{ staffRole: StaffRole.TEACHER, staffStatus: StaffStatus.ACTIVE },
-					{ new: true },
-				)
-				.exec();
-			if (!reactivatedStaff) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+			if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+			return result;
+		} finally {
+			await session.endSession();
 		}
-
-		const result = await this.staffApplicationModel
-			.findByIdAndUpdate(
-				application._id,
-				{
-					applicationStatus: StaffApplicationStatus.APPROVED,
-					reviewedBy: authMember._id,
-					reviewedAt: new Date(),
-				},
-				{ new: true },
-			)
-			.exec();
-		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-
-		return result;
 	}
 
 	public async rejectStaffApplication(authMember: Member, input: StaffApplicationReviewInput): Promise<StaffApplication> {
@@ -250,34 +269,40 @@ export class StaffApplicationService {
 		];
 	}
 
-	private async validatePendingReviewApplication(authMember: Member, applicationId: ObjectId): Promise<StaffApplication> {
-		const application = await this.staffApplicationModel.findById(applicationId).exec();
+	private async validatePendingReviewApplication(
+		authMember: Member,
+		applicationId: ObjectId,
+		session?: ClientSession,
+	): Promise<StaffApplication> {
+		const query = this.staffApplicationModel.findById(applicationId);
+		if (session) query.session(session);
+		const application = await query.exec();
 		if (!application) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		if (application.applicationStatus !== StaffApplicationStatus.PENDING) {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
 
-		await this.assertCanManageStaff(authMember, application.kindergartenId);
+		await this.assertCanManageStaff(authMember, application.kindergartenId, session);
 
 		return application;
 	}
 
-	private async assertCanManageStaff(authMember: Member, kindergartenId: ObjectId): Promise<void> {
+	private async assertCanManageStaff(authMember: Member, kindergartenId: ObjectId, session?: ClientSession): Promise<void> {
 		if (authMember.memberType === MemberType.SUPER_ADMIN) return;
 
 		if (authMember.memberType !== MemberType.KINDERGARTEN_ADMIN) {
 			throw new ForbiddenException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
 		}
 
-		const ownerRecord = await this.kindergartenStaffModel
-			.findOne({
-				kindergartenId,
-				memberId: authMember._id,
-				staffStatus: StaffStatus.ACTIVE,
-				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
-			})
-			.exec();
+		const query = this.kindergartenStaffModel.findOne({
+			kindergartenId,
+			memberId: authMember._id,
+			staffStatus: StaffStatus.ACTIVE,
+			staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+		});
+		if (session) query.session(session);
+		const ownerRecord = await query.exec();
 
 		if (!ownerRecord) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
 	}
