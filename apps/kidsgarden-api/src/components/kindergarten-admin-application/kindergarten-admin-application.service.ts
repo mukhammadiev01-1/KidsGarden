@@ -5,8 +5,10 @@ import { capPaginationLimit, memberPreviewProjection } from '../../libs/config';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { KindergartenAdminApplicationStatus } from '../../libs/enums/kindergarten-admin-application.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
+import { NotificationTargetType, NotificationType } from '../../libs/enums/notification.enum';
 import { T } from '../../libs/types/common';
 import { Member } from '../../libs/dto/member/member';
+import { NotificationInput } from '../../libs/dto/notification/notification.input';
 import {
 	KindergartenAdminApplication,
 	KindergartenAdminApplications,
@@ -16,6 +18,7 @@ import {
 	KindergartenAdminApplicationReviewInput,
 	KindergartenAdminApplicationsInquiry,
 } from '../../libs/dto/kindergarten-admin-application/kindergarten-admin-application.input';
+import { NotificationService } from '../notification/notification.service';
 
 const KINDERGARTEN_ADMIN_APPLICATION_STATUS_TRANSITIONS: Record<
 	KindergartenAdminApplicationStatus,
@@ -39,6 +42,7 @@ export class KindergartenAdminApplicationService {
 		@InjectModel('KindergartenAdminApplication')
 		private readonly kindergartenAdminApplicationModel: Model<KindergartenAdminApplication>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly notificationService: NotificationService,
 		@InjectConnection() private readonly connection: Connection,
 	) {}
 
@@ -59,11 +63,16 @@ export class KindergartenAdminApplicationService {
 		if (duplicate) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 
 		try {
-			return await this.kindergartenAdminApplicationModel.create({
+			const application = await this.kindergartenAdminApplicationModel.create({
 				...input,
 				applicantId: authMember._id,
 				applicationStatus: KindergartenAdminApplicationStatus.PENDING,
 			});
+			void this.reserveKindergartenAdminApplicationCreatedHooks(application).catch((err) => {
+				console.log('Kindergarten admin application created notification hook failed:', err.message);
+			});
+
+			return application;
 		} catch (err) {
 			console.log('Error, Service.model:', err.message);
 			throw new BadRequestException(Message.CREATE_FAILED);
@@ -161,6 +170,9 @@ export class KindergartenAdminApplicationService {
 			});
 
 			if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+			void this.reserveKindergartenAdminApplicationStatusUpdatedHooks(result).catch((err) => {
+				console.log('Kindergarten admin application approved notification hook failed:', err.message);
+			});
 			return result;
 		} finally {
 			await session.endSession();
@@ -187,6 +199,10 @@ export class KindergartenAdminApplicationService {
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		void this.reserveKindergartenAdminApplicationStatusUpdatedHooks(result).catch((err) => {
+			console.log('Kindergarten admin application rejected notification hook failed:', err.message);
+		});
 
 		return result;
 	}
@@ -294,5 +310,76 @@ export class KindergartenAdminApplicationService {
 			})
 			.exec();
 		if (!applicant) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
+	}
+
+	private async getActiveSuperAdminRecipientIds(excludedIds: ObjectId[] = []): Promise<ObjectId[]> {
+		const excluded = new Set(excludedIds.map((id) => id.toString()));
+		const superAdmins = await this.memberModel
+			.find({ memberType: MemberType.SUPER_ADMIN, memberStatus: MemberStatus.ACTIVE })
+			.select('_id')
+			.exec();
+
+		return this.uniqueObjectIds(superAdmins.map((member) => member._id)).filter(
+			(memberId) => !excluded.has(memberId.toString()),
+		);
+	}
+
+	private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {
+		const seen = new Set<string>();
+		return ids.filter((id) => {
+			const key = id.toString();
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+	}
+
+	private async createNotificationsBestEffort(inputs: NotificationInput[]): Promise<void> {
+		for (const input of inputs) {
+			try {
+				await this.notificationService.createNotification(input);
+			} catch (err) {
+				console.log('Kindergarten admin application notification failed:', err.message);
+			}
+		}
+	}
+
+	private async reserveKindergartenAdminApplicationCreatedHooks(
+		application: KindergartenAdminApplication,
+	): Promise<void> {
+		const recipientIds = await this.getActiveSuperAdminRecipientIds([application.applicantId]);
+		await this.createNotificationsBestEffort(
+			recipientIds.map((recipientId) => ({
+				recipientId,
+				senderId: application.applicantId,
+				type: NotificationType.KINDERGARTEN_ADMIN_APPLICATION_CREATED,
+				title: 'New kindergarten admin application',
+				message: 'A kindergarten admin application was submitted.',
+				targetType: NotificationTargetType.KINDERGARTEN_ADMIN_APPLICATION,
+				targetId: application._id,
+				metadata: {
+					status: application.applicationStatus,
+				},
+			})),
+		);
+	}
+
+	private async reserveKindergartenAdminApplicationStatusUpdatedHooks(
+		application: KindergartenAdminApplication,
+	): Promise<void> {
+		await this.createNotificationsBestEffort([
+			{
+				recipientId: application.applicantId,
+				senderId: application.reviewedBy,
+				type: NotificationType.KINDERGARTEN_ADMIN_APPLICATION_STATUS_UPDATED,
+				title: 'Kindergarten admin application updated',
+				message: `Your kindergarten admin application status is ${application.applicationStatus}.`,
+				targetType: NotificationTargetType.KINDERGARTEN_ADMIN_APPLICATION,
+				targetId: application._id,
+				metadata: {
+					status: application.applicationStatus,
+				},
+			},
+		]);
 	}
 }

@@ -69,20 +69,58 @@ Do not change routes or backend.
 Report exact files, visible risk, and minimal fix order.
 ```
 
-## Notifications Planning
+## Notifications Integration QA
 
 ```text
-KidsGarden Notifications Planning only.
+KidsGarden Notifications Integration QA and bugfix pass.
+
+Work only in KidsGarden and KidsGarden-client.
+Do not redesign UI.
+Do not change package files.
+Do not add Redis or WebSocket realtime.
+Do not add new notification event types unless fixing a clear bug.
+Do not touch compatibility fields/routes unless directly required by the bug.
+
+Verify:
+- users can read only their own notifications
+- users can mark only their own notifications read
+- unread count is correct
+- mark one read works
+- mark all read works
+- NotificationBell shows for authenticated users
+- notification list loading/error/empty states work
+- target navigation works for APPLICATION, APPLICATION_CHAT, STAFF_APPLICATION, KINDERGARTEN_ADMIN_APPLICATION, and KINDERGARTEN
+- non-linked targets do not break UI
+- notification text does not include sensitive child, document, comment, or chat message content
+- connected events deliver for Kindergarten Application, APPLICATION_CHAT, Teacher Application, Kindergarten Admin Application, and kindergarten comment created
+
+Run:
+- backend git diff --check
+- frontend git diff --check
+- backend yarn build
+- frontend yarn build
+
+Report issues found, fixes made, backend behavior verified, frontend behavior verified, manual browser QA still needed, and build results.
+```
+
+## Notifications Future Events Audit
+
+```text
+KidsGarden Notifications Future Events Audit only.
 
 Do not edit files.
-Inspect current backend events/workflows:
-- applications
-- attendance
-- comments/community
-- chat
+The notification foundation, NotificationBell, and core application/chat/role/comment-created events already exist.
 
-Design notification model, permissions, unread counts, delivery points, frontend UI entry points, and MVP scope.
-Report backend files, frontend files, risks, and implementation order.
+Audit future event candidates:
+- attendance workflow notifications
+- threaded comment replies
+- comment likes
+- announcement/news notifications
+- Redis/WebSocket realtime delivery
+
+Only recommend events with clear recipients and spam-control rules.
+Do not include child/document/comment/chat content in notification text.
+Report backend files, frontend files, privacy risks, and implementation order.
 ```
 
 ## Chat Implementation Audit

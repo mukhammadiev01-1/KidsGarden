@@ -7,6 +7,8 @@ import { AuthModule } from '../auth/auth.module';
 import { MemberModule } from '../member/member.module';
 import { KindergartenModule } from '../kindergarten/kindergarten.module';
 import { BoardArticleModule } from '../board-article/board-article.module';
+import { NotificationModule } from '../notification/notification.module';
+import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
 
 @Module({
   imports: [
@@ -15,11 +17,16 @@ import { BoardArticleModule } from '../board-article/board-article.module';
         name: 'Comment',
         schema: CommentSchema,
       },
+      {
+        name: 'KindergartenStaff',
+        schema: KindergartenStaffSchema,
+      },
     ]),
     AuthModule,
     MemberModule,
     KindergartenModule,
     BoardArticleModule,
+    NotificationModule,
   ],
   providers: [CommentResolver, CommentService],
 })

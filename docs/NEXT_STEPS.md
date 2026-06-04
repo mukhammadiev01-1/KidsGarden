@@ -9,8 +9,8 @@
 | Confirm parent can cancel only non-final applications | High | Parent dashboard |
 | Confirm Kindergarten Admin sees only managed-kindergarten applications | High | Backend + frontend runtime |
 | Confirm Super Admin application status updates | High | Admin runtime |
-| Add notification events for application created/status changed | Medium | Backend + frontend |
-| Connect application context to future chat | Medium | Backend + frontend |
+| Confirm notification delivery for application created/status/canceled | High | Backend + frontend runtime |
+| Confirm application chat target navigation from notifications | High | Frontend runtime |
 
 ## Approval Flows
 
@@ -33,20 +33,24 @@
 
 ## Notifications
 
-| Task | Priority |
-| --- | --- |
-| Define notification events for applications, attendance, comments, chat | Medium |
-| Add notification model and read-state design | Medium |
-| Add dashboard notification UI | Medium |
+| Task | Priority | Scope |
+| --- | --- | --- |
+| Manual browser QA for NotificationBell with real accounts | High | Frontend runtime |
+| Verify unread count, mark one read, and mark all read | High | Backend + frontend runtime |
+| Verify connected event delivery for applications, application chat, role applications, and kindergarten comments | High | Backend + frontend runtime |
+| Add attendance notifications after attendance workflow QA | Medium | Backend + frontend |
+| Add comment reply notifications only after threaded comments exist | Medium | Backend + frontend |
+| Add comment-like notifications only after comment likes are clearly supported | Medium | Backend + frontend |
+| Add announcement/news notifications only after audience/follow rules are defined | Medium | Backend + frontend |
+| Add Redis/WebSocket realtime notification delivery | Later | Backend + frontend |
 
 ## Full Chat
 
 | Task | Priority |
 | --- | --- |
-| Replace simple global socket chat with scoped conversations | High |
-| Add `Conversation`, `Message`, and `MessageRead` models | High |
-| Enforce parent/teacher/kindergarten-admin relationship permissions | High |
-| Persist messages and support unread counts | Medium |
+| Manually QA scoped persisted application chat with real Parent and Kindergarten Admin accounts | High |
+| Add realtime delivery for persisted application chat | Medium |
+| Add read-state UI polish for application chat | Medium |
 | Support chat image attachments | Medium |
 | Add Redis-backed realtime infrastructure | Medium |
 
@@ -92,8 +96,10 @@
 | Task | Priority |
 | --- | --- |
 | Smoke test Application / Inquiry with real accounts | High |
+| Smoke test notifications with Parent, Kindergarten Admin, Teacher, and Super Admin accounts | High |
 | Smoke test auth, upload, public pages, dashboards | High |
 | Add targeted tests for application access rules and status transitions | Medium |
+| Add targeted tests for notification ownership and event recipient rules | Medium |
 | Add targeted tests for role guards and upload validation | Medium |
 
 ## Documentation

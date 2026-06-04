@@ -46,6 +46,19 @@
 | Super Admin applications | Implemented | `/_admin/applications` loads all parent applications and supports status updates. |
 | Manual browser QA | Pending | Needs real Parent, Kindergarten Admin, and Super Admin account testing. |
 
+## Notifications UI
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| NotificationBell | Implemented | Displays for authenticated users in the shared header. |
+| Unread count | Implemented | Uses backend unread-count query and refetches after read actions. |
+| Notification list | Implemented | Loads recent notifications in a simple dropdown with loading, error, and empty states. |
+| Mark one read | Implemented | Marks the selected notification as read, refetches count/list, then navigates when a target route exists. |
+| Mark all read | Implemented | Marks the authenticated user's unread notifications as read and refetches count/list. |
+| Target navigation | Implemented | Application and application chat route to My Applications; role applications route to mypage or Super Admin review pages; Kindergarten routes to kindergarten detail. |
+| Non-linked targets | Safe fallback | Comment, article/news, announcement, and system targets remain non-linked unless a safe target route is defined. |
+| Manual browser QA | Pending | Needs real account testing for delivery, read state, and target navigation. |
+
 ## Mobile QA Targets
 
 | Target | Standard |
@@ -59,8 +72,9 @@
 | Item | Priority | Notes |
 | --- | --- | --- |
 | Application / Inquiry manual QA | High | Verify create, duplicate error, cancel, admin status update, parent refresh, and unauthorized states. |
+| Notifications manual QA | High | Verify NotificationBell visibility, unread count, list, read actions, and target navigation with real accounts. |
 | Upload UI completion | High | Member/profile save and kindergarten image/gallery upload need verification and completion. |
 | Favorites/recently visited UI | Medium | Backend support exists; frontend components need safe KidsGarden cleanup before enabling. |
-| Chat widget | Medium | Current global chat is not final product behavior. |
+| Realtime chat/notifications | Medium | Application chat and notifications are persisted through GraphQL; Redis/WebSocket realtime remains later. |
 | Mobile regression pass | Medium | Run after current feature changes settle. |
 | Visual polish | Low | Public pages are implemented; final manual polish can be staged separately. |

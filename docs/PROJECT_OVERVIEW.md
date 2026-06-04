@@ -30,6 +30,7 @@ New code should use KidsGarden and kindergarten-oriented naming. Older route/API
 | Parent community | Articles, Q&A-style content, parent tips, platform news | Implemented |
 | Help center | Static support page for parents, teachers, kindergartens, account, privacy, applications | Implemented |
 | Auth | Login/register with browser password-manager friendly form and canonical `/login`/`/register` redirects | Implemented |
+| In-app notifications | Unified notification model/API, header bell, unread count, read actions, and core workflow events | Implemented |
 | Parent dashboard | Children, attendance, staff application, kindergarten admin application, Parent Board write, My Applications | Implemented |
 | Teacher dashboard | Assigned groups and attendance | Implemented |
 | Kindergarten admin dashboard | My kindergarten, staff, staff applications, groups, children, attendance, incoming parent applications | Implemented |
@@ -70,10 +71,9 @@ New code should use KidsGarden and kindergarten-oriented naming. Older route/API
 ## Current Priorities
 
 1. Run manual browser QA for the Application / Inquiry MVP using real Parent, Kindergarten Admin, and Super Admin accounts.
-2. Finish approval-flow polish for Teacher and Kindergarten Admin access.
-3. Connect chat to application/kindergarten context with relationship permissions.
-4. Add chat image attachments and Redis-backed realtime infrastructure.
-5. Add notifications for applications, attendance, comments, and chat.
-6. Prepare social login without granting privileged roles automatically.
-7. Replace map placeholders with geocoded kindergarten location support.
-8. Continue dashboard and production polish after core workflows are stable.
+2. Run manual browser QA for notification delivery, unread count, read actions, and target navigation.
+3. Finish approval-flow polish for Teacher and Kindergarten Admin access.
+4. Add chat image attachments and Redis-backed realtime infrastructure after persisted application chat is stable.
+5. Prepare social login without granting privileged roles automatically.
+6. Replace map placeholders with geocoded kindergarten location support.
+7. Continue dashboard and production polish after core workflows are stable.

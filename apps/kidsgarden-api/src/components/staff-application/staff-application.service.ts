@@ -7,16 +7,19 @@ import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
 import { StaffApplicationStatus } from '../../libs/enums/staff-application.enum';
+import { NotificationTargetType, NotificationType } from '../../libs/enums/notification.enum';
 import { T } from '../../libs/types/common';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
+import { NotificationInput } from '../../libs/dto/notification/notification.input';
 import { StaffApplication, StaffApplications } from '../../libs/dto/staff-application/staff-application';
 import {
 	StaffApplicationInput,
 	StaffApplicationReviewInput,
 	StaffApplicationsInquiry,
 } from '../../libs/dto/staff-application/staff-application.input';
+import { NotificationService } from '../notification/notification.service';
 
 const STAFF_APPLICATION_STATUS_TRANSITIONS: Record<StaffApplicationStatus, StaffApplicationStatus[]> = {
 	[StaffApplicationStatus.PENDING]: [
@@ -38,6 +41,7 @@ export class StaffApplicationService {
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly notificationService: NotificationService,
 		@InjectConnection() private readonly connection: Connection,
 	) {}
 
@@ -57,11 +61,16 @@ export class StaffApplicationService {
 		if (duplicate) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 
 		try {
-			return await this.staffApplicationModel.create({
+			const application = await this.staffApplicationModel.create({
 				...input,
 				applicantId: authMember._id,
 				applicationStatus: StaffApplicationStatus.PENDING,
 			});
+			void this.reserveStaffApplicationCreatedHooks(application).catch((err) => {
+				console.log('Staff application created notification hook failed:', err.message);
+			});
+
+			return application;
 		} catch (err) {
 			console.log('Error, Service.model:', err.message);
 			throw new BadRequestException(Message.CREATE_FAILED);
@@ -186,6 +195,9 @@ export class StaffApplicationService {
 			});
 
 			if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+			void this.reserveStaffApplicationStatusUpdatedHooks(result).catch((err) => {
+				console.log('Staff application approved notification hook failed:', err.message);
+			});
 			return result;
 		} finally {
 			await session.endSession();
@@ -209,6 +221,10 @@ export class StaffApplicationService {
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		void this.reserveStaffApplicationStatusUpdatedHooks(result).catch((err) => {
+			console.log('Staff application rejected notification hook failed:', err.message);
+		});
 
 		return result;
 	}
@@ -339,5 +355,83 @@ export class StaffApplicationService {
 			.exec();
 
 		return staffRecords.map((staff) => staff.kindergartenId);
+	}
+
+	private async getActiveKindergartenAdminRecipientIds(
+		kindergartenId: ObjectId,
+		excludedIds: ObjectId[] = [],
+	): Promise<ObjectId[]> {
+		const excluded = new Set(excludedIds.map((id) => id.toString()));
+		const staffRecords = await this.kindergartenStaffModel
+			.find({
+				kindergartenId,
+				staffStatus: StaffStatus.ACTIVE,
+				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+			})
+			.select('memberId')
+			.exec();
+
+		return this.uniqueObjectIds(staffRecords.map((staff) => staff.memberId)).filter(
+			(memberId) => !excluded.has(memberId.toString()),
+		);
+	}
+
+	private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {
+		const seen = new Set<string>();
+		return ids.filter((id) => {
+			const key = id.toString();
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+	}
+
+	private async createNotificationsBestEffort(inputs: NotificationInput[]): Promise<void> {
+		for (const input of inputs) {
+			try {
+				await this.notificationService.createNotification(input);
+			} catch (err) {
+				console.log('Staff application notification failed:', err.message);
+			}
+		}
+	}
+
+	private async reserveStaffApplicationCreatedHooks(application: StaffApplication): Promise<void> {
+		const recipientIds = await this.getActiveKindergartenAdminRecipientIds(application.kindergartenId, [
+			application.applicantId,
+		]);
+		await this.createNotificationsBestEffort(
+			recipientIds.map((recipientId) => ({
+				recipientId,
+				senderId: application.applicantId,
+				type: NotificationType.TEACHER_APPLICATION_CREATED,
+				title: 'New teacher application',
+				message: 'A teacher application was submitted for your kindergarten.',
+				targetType: NotificationTargetType.STAFF_APPLICATION,
+				targetId: application._id,
+				metadata: {
+					kindergartenId: application.kindergartenId.toString(),
+					status: application.applicationStatus,
+				},
+			})),
+		);
+	}
+
+	private async reserveStaffApplicationStatusUpdatedHooks(application: StaffApplication): Promise<void> {
+		await this.createNotificationsBestEffort([
+			{
+				recipientId: application.applicantId,
+				senderId: application.reviewedBy,
+				type: NotificationType.TEACHER_APPLICATION_STATUS_UPDATED,
+				title: 'Teacher application updated',
+				message: `Your teacher application status is ${application.applicationStatus}.`,
+				targetType: NotificationTargetType.STAFF_APPLICATION,
+				targetId: application._id,
+				metadata: {
+					kindergartenId: application.kindergartenId.toString(),
+					status: application.applicationStatus,
+				},
+			},
+		]);
 	}
 }

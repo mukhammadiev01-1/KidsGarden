@@ -2,23 +2,23 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
-import { ApplicationResolver } from './application.resolver';
-import { ApplicationService } from './application.service';
+import { ChatResolver } from './chat.resolver';
+import { ChatService } from './chat.service';
 import ApplicationSchema from '../../shemas/Application.model';
-import KindergartenSchema from '../../shemas/Kindergarten.model';
+import ConversationSchema from '../../shemas/Conversation.model';
 import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
-import MemberSchema from '../../shemas/Member.model';
+import MessageSchema from '../../shemas/Message.model';
 
 @Module({
 	imports: [
 		MongooseModule.forFeature([{ name: 'Application', schema: ApplicationSchema }]),
-		MongooseModule.forFeature([{ name: 'Kindergarten', schema: KindergartenSchema }]),
+		MongooseModule.forFeature([{ name: 'Conversation', schema: ConversationSchema }]),
 		MongooseModule.forFeature([{ name: 'KindergartenStaff', schema: KindergartenStaffSchema }]),
-		MongooseModule.forFeature([{ name: 'Member', schema: MemberSchema }]),
+		MongooseModule.forFeature([{ name: 'Message', schema: MessageSchema }]),
 		AuthModule,
 		NotificationModule,
 	],
-	providers: [ApplicationResolver, ApplicationService],
-	exports: [ApplicationService],
+	providers: [ChatResolver, ChatService],
+	exports: [ChatService],
 })
-export class ApplicationModule {}
+export class ChatModule {}

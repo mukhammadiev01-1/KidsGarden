@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationModule } from '../notification/notification.module';
 import { StaffApplicationResolver } from './staff-application.resolver';
 import { StaffApplicationService } from './staff-application.service';
 import StaffApplicationSchema from '../../shemas/StaffApplication.model';
@@ -15,6 +16,7 @@ import MemberSchema from '../../shemas/Member.model';
 		MongooseModule.forFeature([{ name: 'KindergartenStaff', schema: KindergartenStaffSchema }]),
 		MongooseModule.forFeature([{ name: 'Member', schema: MemberSchema }]),
 		AuthModule,
+		NotificationModule,
 	],
 	providers: [StaffApplicationResolver, StaffApplicationService],
 	exports: [StaffApplicationService],

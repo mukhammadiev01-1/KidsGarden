@@ -73,10 +73,26 @@
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Simple socket gateway | Present | Current socket flow is not production-grade. |
-| Persistent conversations | Missing | Needs `Conversation`, `Message`, and read-state model design. |
-| Relationship-based permissions | Missing | Chat must be scoped by parent/teacher/kindergarten relationships. |
-| Notifications | Missing | Needs event model and delivery plan. |
+| Simple socket gateway | Present | Current global socket flow is not used for private application chat. |
+| Persisted application chat | Implemented | `APPLICATION_CHAT` uses `Conversation` and `Message` persistence through GraphQL. |
+| Relationship-based chat permissions | Implemented | Parent, Kindergarten Admin, and Super Admin access is scoped to the linked Kindergarten Application; Teacher is excluded. |
+| Notification model/API | Implemented | Unified in-app notifications include recipient, sender, audience, type, target, metadata, read state, and guarded list/read mutations. |
+| Notification access control | Implemented | Authenticated users can list and mark only their own notifications. |
+| NotificationBell | Frontend implemented | Header bell supports unread count, recent list, mark one read, mark all read, and safe target navigation. |
+| Connected notification events | Implemented | Kindergarten Application created/status/canceled, application chat message, Teacher Application created/status, Kindergarten Admin Application created/status, and kindergarten comment created. |
+| Skipped notification events | Intentional | Comment replies, comment likes, and broad article/news notifications are deferred until thread/comment-like/audience rules are clear. |
+| Realtime notifications | Later | Redis/WebSocket delivery is not part of the MVP foundation; current UI uses GraphQL refetches. |
+
+## Notification Privacy Rules
+
+| Rule | Status | Notes |
+| --- | --- | --- |
+| No sensitive child/document text in notifications | Implemented | Application notifications use generic titles/messages and status metadata only. |
+| No chat message text in notifications | Implemented | Chat notifications say a new message exists and link to the application chat target. |
+| No comment body in notifications | Implemented | Kindergarten comment notifications do not include comment content. |
+| Sender excluded | Implemented | Event hooks exclude the actor from recipient lists. |
+| Duplicate recipients deduped | Implemented | Recipient helper methods dedupe active recipient IDs before notification creation. |
+| Notification creation is best-effort | Implemented | Workflow operations catch notification creation failures so core operations continue. |
 
 ## Compatibility Layer
 
@@ -93,7 +109,9 @@
 | --- | --- | --- |
 | Socket auth may not match GraphQL hydrated guard behavior | High | Rework socket auth during full chat phase. |
 | Application / Inquiry needs authenticated browser QA | High | Test Parent create/cancel, Kindergarten Admin update, and Super Admin update with real accounts. |
+| Notifications need authenticated browser QA | High | Test delivery, unread count, mark read, mark all read, and target navigation with real role accounts. |
 | Upload flow needs manual verification | High | Verify profile, kindergarten, and article image upload end to end. |
 | Token payload broadness | Medium | Reduce after frontend dependency audit. |
 | Remaining hard-delete admin mutations may exist | Medium | Keep UI unwired; audit before exposing. |
+| Realtime notification delivery is not implemented | Medium | Add Redis/WebSocket delivery after the GraphQL notification foundation is stable. |
 | Counter drift on non-transactional areas | Low | Audit after MVP unless user-visible drift appears. |

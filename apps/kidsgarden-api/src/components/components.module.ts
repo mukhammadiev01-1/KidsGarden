@@ -14,6 +14,8 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { StaffApplicationModule } from './staff-application/staff-application.module';
 import { KindergartenAdminApplicationModule } from './kindergarten-admin-application/kindergarten-admin-application.module';
 import { ApplicationModule } from './application/application.module';
+import { ChatModule } from './chat/chat.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { ApplicationModule } from './application/application.module';
     ChildModule,
     AttendanceModule,
     ApplicationModule,
+    ChatModule,
+    NotificationModule,
     StaffApplicationModule,
     KindergartenAdminApplicationModule,
     AuthModule,

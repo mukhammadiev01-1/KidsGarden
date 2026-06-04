@@ -1,58 +1,75 @@
 import { Schema } from 'mongoose';
-import { NotificationGroup, NotificationStatus, NotificationType } from '../libs/enums/notification.enum';
+import { NotificationAudience, NotificationTargetType, NotificationType } from '../libs/enums/notification.enum';
+import { MemberType } from '../libs/enums/member.enum';
 
 const NotificationSchema = new Schema(
 	{
-		notificationType: {
+		recipientId: {
+			type: Schema.Types.ObjectId,
+			required: true,
+			ref: 'Member',
+		},
+
+		senderId: {
+			type: Schema.Types.ObjectId,
+			ref: 'Member',
+		},
+
+		recipientRole: {
+			type: String,
+			enum: MemberType,
+		},
+
+		type: {
 			type: String,
 			enum: NotificationType,
 			required: true,
 		},
 
-		notificationStatus: {
+		audience: {
 			type: String,
-			enum: NotificationStatus,
-			default: NotificationStatus.WAIT,
-		},
-
-		notificationGroup: {
-			type: String,
-			enum: NotificationGroup,
+			enum: NotificationAudience,
 			required: true,
 		},
 
-		notificationTitle: {
+		title: {
 			type: String,
 			required: true,
+			trim: true,
 		},
 
-		notificationDesc: {
+		message: {
+			type: String,
+			required: true,
+			trim: true,
+		},
+
+		targetType: {
+			type: String,
+			enum: NotificationTargetType,
+			required: true,
+		},
+
+		targetId: {
+			type: String,
+			required: true,
+			trim: true,
+		},
+
+		metadata: {
 			type: String,
 		},
 
-		authorId: {
-			type: Schema.Types.ObjectId,
-			required: true,
-			ref: 'Member',
-		},
-
-		receiverId: {
-			type: Schema.Types.ObjectId,
-			required: true,
-			ref: 'Member',
-		},
-
-		kindergartenId: {
-			type: Schema.Types.ObjectId,
-			ref: 'Kindergarten',
-		},
-
-		articleId: {
-			type: Schema.Types.ObjectId,
-			ref: 'BoardArticle',
+		isRead: {
+			type: Boolean,
+			default: false,
 		},
 	},
 	{ timestamps: true, collection: 'notifications' },
 );
+
+NotificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
+NotificationSchema.index({ recipientId: 1, createdAt: -1 });
+NotificationSchema.index({ type: 1, targetType: 1, targetId: 1 });
 
 export default NotificationSchema;

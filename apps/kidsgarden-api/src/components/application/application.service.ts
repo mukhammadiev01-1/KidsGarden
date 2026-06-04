@@ -13,6 +13,7 @@ import { ApplicationStatus } from '../../libs/enums/application.enum';
 import { KindergartenStatus } from '../../libs/enums/kindergarten.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
+import { NotificationTargetType, NotificationType } from '../../libs/enums/notification.enum';
 import { T } from '../../libs/types/common';
 import { Application, Applications } from '../../libs/dto/application/application';
 import { ApplicationDocumentInput, ApplicationInput, ApplicationsInquiry } from '../../libs/dto/application/application.input';
@@ -20,6 +21,8 @@ import { ApplicationStatusUpdateInput } from '../../libs/dto/application/applica
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
+import { NotificationInput } from '../../libs/dto/notification/notification.input';
+import { NotificationService } from '../notification/notification.service';
 
 const OPEN_APPLICATION_STATUSES = [
 	ApplicationStatus.PENDING,
@@ -74,6 +77,7 @@ export class ApplicationService {
 		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly notificationService: NotificationService,
 	) {}
 
 	public async createApplication(authMember: Member, input: ApplicationInput): Promise<Application> {
@@ -93,7 +97,9 @@ export class ApplicationService {
 				status: ApplicationStatus.PENDING,
 			});
 
-			this.reserveApplicationCreatedHooks(application);
+			void this.reserveApplicationCreatedHooks(application).catch((err) => {
+				console.log('Application created notification hook failed:', err.message);
+			});
 			return application;
 		} catch (err) {
 			console.log('Error, Service.model:', err.message);
@@ -152,7 +158,9 @@ export class ApplicationService {
 		const result = await this.applicationModel.findByIdAndUpdate(application._id, update, { new: true }).exec();
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 
-		this.reserveApplicationStatusUpdatedHooks(result);
+		void this.reserveApplicationStatusUpdatedHooks(result).catch((err) => {
+			console.log('Application status notification hook failed:', err.message);
+		});
 		return result;
 	}
 
@@ -179,7 +187,9 @@ export class ApplicationService {
 			.exec();
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 
-		this.reserveApplicationCanceledHooks(result);
+		void this.reserveApplicationCanceledHooks(result).catch((err) => {
+			console.log('Application canceled notification hook failed:', err.message);
+		});
 		return result;
 	}
 
@@ -385,20 +395,107 @@ export class ApplicationService {
 		return staffRecords.map((staff) => staff.kindergartenId);
 	}
 
+	private async getActiveKindergartenAdminRecipientIds(
+		kindergartenId: ObjectId,
+		excludedIds: ObjectId[] = [],
+	): Promise<ObjectId[]> {
+		const excluded = new Set(excludedIds.map((id) => id.toString()));
+		const staffRecords = await this.kindergartenStaffModel
+			.find({
+				kindergartenId,
+				staffStatus: StaffStatus.ACTIVE,
+				staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+			})
+			.select('memberId')
+			.exec();
+
+		return this.uniqueObjectIds(staffRecords.map((staff) => staff.memberId)).filter(
+			(memberId) => !excluded.has(memberId.toString()),
+		);
+	}
+
+	private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {
+		const seen = new Set<string>();
+		return ids.filter((id) => {
+			const key = id.toString();
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+	}
+
+	private async createNotificationsBestEffort(inputs: NotificationInput[]): Promise<void> {
+		for (const input of inputs) {
+			try {
+				await this.notificationService.createNotification(input);
+			} catch (err) {
+				console.log('Application notification failed:', err.message);
+			}
+		}
+	}
+
 	private assertValidStatusTransition(currentStatus: ApplicationStatus, nextStatus: ApplicationStatus): void {
 		const allowedNextStatuses = APPLICATION_STATUS_TRANSITIONS[currentStatus] ?? [];
 		if (!allowedNextStatuses.includes(nextStatus)) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 	}
 
-	private reserveApplicationCreatedHooks(_application: Application): void {
-		// Future hook: notify kindergarten admins and open/link application-scoped chat.
+	private async reserveApplicationCreatedHooks(application: Application): Promise<void> {
+		const recipientIds = await this.getActiveKindergartenAdminRecipientIds(application.kindergartenId, [
+			application.parentId,
+		]);
+		await this.createNotificationsBestEffort(
+			recipientIds.map((recipientId) => ({
+				recipientId,
+				senderId: application.parentId,
+				type: NotificationType.KINDERGARTEN_APPLICATION_CREATED,
+				title: 'New kindergarten application',
+				message: 'A parent submitted a new kindergarten application.',
+				targetType: NotificationTargetType.APPLICATION,
+				targetId: application._id,
+				metadata: {
+					kindergartenId: application.kindergartenId.toString(),
+					status: application.status,
+				},
+			})),
+		);
 	}
 
-	private reserveApplicationStatusUpdatedHooks(_application: Application): void {
-		// Future hook: notify parent and sync application-scoped chat metadata.
+	private async reserveApplicationStatusUpdatedHooks(application: Application): Promise<void> {
+		await this.createNotificationsBestEffort([
+			{
+				recipientId: application.parentId,
+				senderId: application.reviewedBy,
+				type: NotificationType.KINDERGARTEN_APPLICATION_STATUS_UPDATED,
+				title: 'Kindergarten application updated',
+				message: `Your kindergarten application status is ${application.status}.`,
+				targetType: NotificationTargetType.APPLICATION,
+				targetId: application._id,
+				metadata: {
+					kindergartenId: application.kindergartenId.toString(),
+					status: application.status,
+				},
+			},
+		]);
 	}
 
-	private reserveApplicationCanceledHooks(_application: Application): void {
-		// Future hook: notify kindergarten admins and close pending application chat state.
+	private async reserveApplicationCanceledHooks(application: Application): Promise<void> {
+		const recipientIds = await this.getActiveKindergartenAdminRecipientIds(application.kindergartenId, [
+			application.parentId,
+		]);
+		await this.createNotificationsBestEffort(
+			recipientIds.map((recipientId) => ({
+				recipientId,
+				senderId: application.parentId,
+				type: NotificationType.KINDERGARTEN_APPLICATION_CANCELED,
+				title: 'Kindergarten application canceled',
+				message: 'A parent canceled a kindergarten application.',
+				targetType: NotificationTargetType.APPLICATION,
+				targetId: application._id,
+				metadata: {
+					kindergartenId: application.kindergartenId.toString(),
+					status: application.status,
+				},
+			})),
+		);
 	}
 }

@@ -22,6 +22,8 @@
 | Teachers do not manage parent applications in MVP | Application management belongs to Parents, Kindergarten Admins, and Super Admins | Teacher application handling can be added later only with explicit product scope |
 | Admin updates are status-only where possible | Reduces accidental broad writes | Future richer admin actions need explicit safe mutations |
 | Upload target allowlist remains strict | Prevent path traversal and unintended folder writes | New targets must be reviewed before adding |
+| Notification text must stay privacy-safe | Prevent child/document/comment/message content from leaking through headers or badges | Notifications should use concise generic text plus safe target metadata only |
+| Users can read and mark only their own notifications | Notification state is private per account | Super Admin global notification inspection is not part of MVP |
 
 ## Backend Decisions
 
@@ -30,8 +32,9 @@
 | Kindergarten creation is transactional | Avoid center without owner staff or counter drift | Requires Mongo transaction support in deployment |
 | Staff/admin application approvals are transactional | Avoid partial role/application state | Requires replica-set-compatible Mongo configuration |
 | Recently visited uses view records | Correct behavior for visited list | Frontend UI still needs safe enablement |
-| Parent-to-kindergarten Application / Inquiry is a dedicated model | Separates enrollment/contact workflow from role approval workflows | Needs notifications and chat linkage later |
-| Full chat is a later dedicated system | Current requirements need relationship permissions and persistence | Simple global chat should not be treated as final |
+| Parent-to-kindergarten Application / Inquiry is a dedicated model | Separates enrollment/contact workflow from role approval workflows | Connected to notification events and persisted application chat; browser QA still needed |
+| Persisted application chat is the first chat surface | Kindergarten Application discussions need relationship permissions and history before realtime | Parent-teacher, group/class, and support chat remain later |
+| Notification delivery starts with GraphQL | The MVP needs reliable persistence, unread counts, and read state before realtime delivery | Redis/WebSocket notification fanout remains a later infrastructure phase |
 
 ## Frontend Decisions
 

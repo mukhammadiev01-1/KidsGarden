@@ -11,6 +11,11 @@ import { CommentAdminUpdate, CommentUpdate } from '../../libs/dto/comment/commen
 import { lookupPublicMember, shapeIntoMongoObjectId } from '../../libs/config';
 import { Comment, Comments } from '../../libs/dto/comment/comment';
 import { T } from '../../libs/types/common';
+import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
+import { NotificationTargetType, NotificationType } from '../../libs/enums/notification.enum';
+import { NotificationInput } from '../../libs/dto/notification/notification.input';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class CommentService {
@@ -19,9 +24,11 @@ export class CommentService {
 
   constructor(
     @InjectModel('Comment') private readonly commentModel: Model<Comment>,
+    @InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
     private readonly memberService: MemberService,
     private readonly kindergartenService: KindergartenService,
     private readonly boardArticleService: BoardArticleService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   public async createComment(memberId: ObjectId, input: CommentInput): Promise<Comment> {
@@ -40,6 +47,11 @@ export class CommentService {
     await this.applyCommentCounter(input.commentGroup, input.commentRefId, 1);
 
     if (!result) throw new InternalServerErrorException(Message.CREATE_FAILED);
+    if (result.commentGroup === CommentGroup.KINDERGARTEN) {
+      void this.reserveKindergartenCommentCreatedHooks(result).catch((err) => {
+        console.log('Kindergarten comment notification hook failed:', err.message);
+      });
+    }
     return result;
   }
 
@@ -238,6 +250,64 @@ private shapeCommentUpdate(input: CommentUpdate): Partial<CommentUpdate> {
   if (!Object.keys(update).length) throw new BadRequestException(Message.BAD_REQUEST);
 
   return update;
+}
+
+private async getActiveKindergartenAdminRecipientIds(
+  kindergartenId: ObjectId,
+  excludedIds: ObjectId[] = [],
+): Promise<ObjectId[]> {
+  const excluded = new Set(excludedIds.map((id) => id.toString()));
+  const staffRecords = await this.kindergartenStaffModel
+    .find({
+      kindergartenId,
+      staffStatus: StaffStatus.ACTIVE,
+      staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+    })
+    .select('memberId')
+    .exec();
+
+  return this.uniqueObjectIds(staffRecords.map((staff) => staff.memberId)).filter(
+    (memberId) => !excluded.has(memberId.toString()),
+  );
+}
+
+private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {
+  const seen = new Set<string>();
+  return ids.filter((id) => {
+    const key = id.toString();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+private async createNotificationsBestEffort(inputs: NotificationInput[]): Promise<void> {
+  for (const input of inputs) {
+    try {
+      await this.notificationService.createNotification(input);
+    } catch (err) {
+      console.log('Comment notification failed:', err.message);
+    }
+  }
+}
+
+private async reserveKindergartenCommentCreatedHooks(comment: Comment): Promise<void> {
+  const recipientIds = await this.getActiveKindergartenAdminRecipientIds(comment.commentRefId, [comment.memberId]);
+  await this.createNotificationsBestEffort(
+    recipientIds.map((recipientId) => ({
+      recipientId,
+      senderId: comment.memberId,
+      type: NotificationType.KINDERGARTEN_COMMENT_CREATED,
+      title: 'New kindergarten comment',
+      message: 'A new comment was added to your kindergarten.',
+      targetType: NotificationTargetType.KINDERGARTEN,
+      targetId: comment.commentRefId,
+      metadata: {
+        commentId: comment._id.toString(),
+        kindergartenId: comment.commentRefId.toString(),
+      },
+    })),
+  );
 }
 
 }
