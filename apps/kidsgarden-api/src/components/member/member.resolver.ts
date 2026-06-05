@@ -1,7 +1,15 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql'; // GraphQL dekoratorlarini import qiladi
 import { MemberService } from './member.service'; // member service business logic faylini import qiladi
 import { BadRequestException, UseGuards } from '@nestjs/common'; // validation va error handling uchun import
-import { KindergartenAdminsInquiry, LoginInput, MemberInput, MembersInquiry, PreviewKindergartenMemberInput } from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
+import {
+	GoogleLoginInput,
+	KindergartenAdminsInquiry,
+	LoginInput,
+	MemberInput,
+	MembersInquiry,
+	PreviewKindergartenMemberInput,
+	TelegramLoginInput,
+} from '../../libs/dto/member/member.input'; // login va signup input dto larini import qiladi
 import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member return type dto ni import qiladi
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
@@ -90,6 +98,18 @@ export class MemberResolver {
   public async login(@Args('input') input: LoginInput): Promise<Member> {
     console.log('Mutation: login');
     return await this.memberService.login(input);
+  }
+
+  @Mutation(() => Member)
+  public async googleLogin(@Args('input') input: GoogleLoginInput): Promise<Member> {
+    console.log('Mutation: googleLogin');
+    return await this.memberService.googleLogin(input);
+  }
+
+  @Mutation(() => Member)
+  public async telegramLogin(@Args('input') input: TelegramLoginInput): Promise<Member> {
+    console.log('Mutation: telegramLogin');
+    return await this.memberService.telegramLogin(input);
   }
   
 @UseGuards(AuthGuard)

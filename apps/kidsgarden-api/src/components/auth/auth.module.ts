@@ -4,6 +4,9 @@ import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import MemberSchema from '../../shemas/Member.model';
+import { SocialAuthService } from './social/social-auth.service';
+import { GoogleProvider } from './social/providers/google.provider';
+import { TelegramProvider } from './social/providers/telegram.provider';
 
 @Module({
   imports: [
@@ -14,7 +17,7 @@ import MemberSchema from '../../shemas/Member.model';
       signOptions: { expiresIn: '30d' },
     }),
   ],
-  providers: [AuthService],
-  exports: [AuthService],
+  providers: [AuthService, SocialAuthService, GoogleProvider, TelegramProvider],
+  exports: [AuthService, SocialAuthService],
 })
 export class AuthModule {}

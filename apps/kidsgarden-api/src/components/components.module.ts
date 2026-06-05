@@ -16,6 +16,8 @@ import { KindergartenAdminApplicationModule } from './kindergarten-admin-applica
 import { ApplicationModule } from './application/application.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationModule } from './notification/notification.module';
+import { RedisModule } from './redis/redis.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { NotificationModule } from './notification/notification.module';
     ApplicationModule,
     ChatModule,
     NotificationModule,
+    RedisModule,
+    RealtimeModule,
     StaffApplicationModule,
     KindergartenAdminApplicationModule,
     AuthModule,

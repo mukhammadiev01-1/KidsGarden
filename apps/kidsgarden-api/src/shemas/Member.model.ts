@@ -27,6 +27,25 @@ export const MemberSchema = new Schema(
    required: true,
   },
 
+  memberEmail: {
+   type: String,
+   index: { unique: true, sparse: true },
+   lowercase: true,
+   trim: true,
+  },
+
+  googleId: {
+   type: String,
+   index: { unique: true, sparse: true },
+   select: false,
+  },
+
+  telegramId: {
+   type: String,
+   index: { unique: true, sparse: true },
+   select: false,
+  },
+
   memberNick: {
    type: String,
    index: { unique: true, sparse: true },

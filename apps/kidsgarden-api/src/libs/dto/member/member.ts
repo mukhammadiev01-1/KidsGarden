@@ -21,6 +21,12 @@ export class Member {
 	@Field(() => String)
 	memberPhone: string;
 
+	memberEmail?: string;
+
+	googleId?: string;
+
+	telegramId?: string;
+
 	@Field(() => String)
 	memberNick: string;
 

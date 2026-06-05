@@ -45,6 +45,24 @@ export class LoginInput {
 }
 
 @InputType()
+export class GoogleLoginInput {
+  @IsNotEmpty()
+  @Field(() => String)
+  idToken: string;
+}
+
+@InputType()
+export class TelegramLoginInput {
+  @IsNotEmpty()
+  @Field(() => String)
+  idToken: string;
+
+  @IsOptional()
+  @Field(() => String, { nullable: true })
+  nonce?: string;
+}
+
+@InputType()
 class KGAISearch {
   @IsOptional()
   @Field(() => String, { nullable: true })

@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | API app | Implemented | Active app path is `apps/kidsgarden-api`. |
 | Batch app | Implemented | Active app path is `apps/kidsgarden-batch`. |
+| Redis foundation | Implemented | Uses `REDIS_URL`; local development should set `REDIS_URL=redis://localhost:6379`. Redis is for realtime/pub-sub only, not persistence. |
+| Private realtime gateway | Implemented | WebSocket path is `/realtime`; JWT is required and authenticated users are hydrated from the database before connection. |
 | Compatibility naming | Temporary | Some old route/API fields, enum values, upload targets, and migration mappings remain only for backward compatibility. Do not remove unless a task explicitly scopes compatibility cleanup. |
 
 ## Auth And Session
@@ -73,15 +75,18 @@
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Simple socket gateway | Present | Current global socket flow is not used for private application chat. |
+| Simple socket gateway | Present | Current global socket flow is not used for private application chat or notifications. |
 | Persisted application chat | Implemented | `APPLICATION_CHAT` uses `Conversation` and `Message` persistence through GraphQL. |
 | Relationship-based chat permissions | Implemented | Parent, Kindergarten Admin, and Super Admin access is scoped to the linked Kindergarten Application; Teacher is excluded. |
+| Realtime application chat | Implemented | After Mongo message persistence, `application_chat.message.created` is published to conversation participants except the sender. |
 | Notification model/API | Implemented | Unified in-app notifications include recipient, sender, audience, type, target, metadata, read state, and guarded list/read mutations. |
 | Notification access control | Implemented | Authenticated users can list and mark only their own notifications. |
 | NotificationBell | Frontend implemented | Header bell supports unread count, recent list, mark one read, mark all read, and safe target navigation. |
 | Connected notification events | Implemented | Kindergarten Application created/status/canceled, application chat message, Teacher Application created/status, Kindergarten Admin Application created/status, and kindergarten comment created. |
 | Skipped notification events | Intentional | Comment replies, comment likes, and broad article/news notifications are deferred until thread/comment-like/audience rules are clear. |
-| Realtime notifications | Later | Redis/WebSocket delivery is not part of the MVP foundation; current UI uses GraphQL refetches. |
+| Realtime notifications | Implemented | After Mongo notification persistence, `notification.created` is published to the recipient's private realtime channel. |
+| Realtime source of truth | Implemented | Mongo and GraphQL remain authoritative; Redis/WebSocket only delivers realtime hints that trigger frontend refetches. |
+| Later realtime features | Deferred | Typing indicators, online presence, chat files/images, advanced unread cache, and production Redis/TLS setup are later phases. |
 
 ## Notification Privacy Rules
 
@@ -107,11 +112,11 @@
 
 | Risk | Severity | Recommended Fix |
 | --- | --- | --- |
-| Socket auth may not match GraphQL hydrated guard behavior | High | Rework socket auth during full chat phase. |
+| Realtime browser QA still pending | High | Verify `/realtime` auth, notification events, and application chat events with real accounts. |
 | Application / Inquiry needs authenticated browser QA | High | Test Parent create/cancel, Kindergarten Admin update, and Super Admin update with real accounts. |
 | Notifications need authenticated browser QA | High | Test delivery, unread count, mark read, mark all read, and target navigation with real role accounts. |
 | Upload flow needs manual verification | High | Verify profile, kindergarten, and article image upload end to end. |
 | Token payload broadness | Medium | Reduce after frontend dependency audit. |
 | Remaining hard-delete admin mutations may exist | Medium | Keep UI unwired; audit before exposing. |
-| Realtime notification delivery is not implemented | Medium | Add Redis/WebSocket delivery after the GraphQL notification foundation is stable. |
+| Production Redis/TLS configuration | Medium | Add deployment-specific Redis URL/TLS and connection monitoring before production. |
 | Counter drift on non-transactional areas | Low | Audit after MVP unless user-visible drift appears. |

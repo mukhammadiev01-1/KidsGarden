@@ -9,11 +9,13 @@ import { InjectModel } from '@nestjs/mongoose'; // Mongoose modelni inject qilis
 import { Model, ObjectId } from 'mongoose'; // Mongoose Model type ni import qiladi
 import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member dto type ni import qiladi
 import {
+	GoogleLoginInput,
 	KindergartenAdminsInquiry,
 	LoginInput,
 	MemberInput,
 	MembersInquiry,
 	PreviewKindergartenMemberInput,
+	TelegramLoginInput,
 } from '../../libs/dto/member/member.input'; // signup va login input dto larni import qiladi
 import { Direction, Message } from '../../libs/enums/common.enum'; // umumiy message enum larni import qiladi
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum'; // member status enum larni import qiladi
@@ -34,6 +36,7 @@ import {
 	shapeIntoMongoObjectId,
 } from '../../libs/config';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
+import { SocialAuthService } from '../auth/social/social-auth.service';
 
 @Injectable()
 export class MemberService {
@@ -45,6 +48,7 @@ export class MemberService {
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		private authService: AuthService,
+		private socialAuthService: SocialAuthService,
 		private viewService: ViewService,
 		private likeService: LikeService,
 	) {}
@@ -87,6 +91,14 @@ export class MemberService {
 		response.accessToken = await this.authService.createToken(response);
 
 		return response;
+	}
+
+	public async googleLogin(input: GoogleLoginInput): Promise<Member> {
+		return this.socialAuthService.googleLogin(input);
+	}
+
+	public async telegramLogin(input: TelegramLoginInput): Promise<Member> {
+		return this.socialAuthService.telegramLogin(input);
 	}
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {

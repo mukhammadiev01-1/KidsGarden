@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { capPaginationLimit } from '../../libs/config';
@@ -9,9 +9,14 @@ import { Member } from '../../libs/dto/member/member';
 import { Notification, Notifications } from '../../libs/dto/notification/notification';
 import { NotificationInput, NotificationsInquiry } from '../../libs/dto/notification/notification.input';
 import { T } from '../../libs/types/common';
+import { RedisService } from '../redis/redis.service';
+import { RealtimeService } from '../realtime/realtime.service';
+
+const NOTIFICATION_CREATED_EVENT = 'notification.created';
 
 @Injectable()
 export class NotificationService {
+	private readonly logger = new Logger(NotificationService.name);
 	private readonly notificationListMaxLimit = 100;
 	private readonly notificationSortFields = ['createdAt', 'updatedAt', 'isRead'];
 	private readonly maxTitleLength = 140;
@@ -21,6 +26,7 @@ export class NotificationService {
 	constructor(
 		@InjectModel('Notification') private readonly notificationModel: Model<Notification>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly redisService: RedisService,
 	) {}
 
 	public async getMyNotifications(authMember: Member, input: NotificationsInquiry): Promise<Notifications> {
@@ -80,8 +86,9 @@ export class NotificationService {
 			throw new BadRequestException(Message.BAD_REQUEST);
 		}
 
+		let notification: Notification;
 		try {
-			return await this.notificationModel.create({
+			notification = await this.notificationModel.create({
 				recipientId: recipient._id,
 				senderId: input.senderId,
 				recipientRole: recipient.memberType,
@@ -97,6 +104,12 @@ export class NotificationService {
 		} catch (err) {
 			throw new BadRequestException(Message.CREATE_FAILED);
 		}
+
+		void this.publishNotificationCreated(notification).catch((err) => {
+			this.logger.warn(`Realtime notification publish failed: ${this.getErrorMessage(err)}`);
+		});
+
+		return notification;
 	}
 
 	public async createNotificationsForRecipients(inputs: NotificationInput[]): Promise<Notification[]> {
@@ -182,5 +195,36 @@ export class NotificationService {
 		if (value.length > this.maxMetadataLength) throw new BadRequestException(Message.BAD_REQUEST);
 
 		return value;
+	}
+
+	private async publishNotificationCreated(notification: Notification): Promise<void> {
+		const published = await this.redisService.publish(RealtimeService.USER_CHANNEL, {
+			memberId: notification.recipientId.toString(),
+			eventName: NOTIFICATION_CREATED_EVENT,
+			payload: this.shapeRealtimeNotification(notification),
+		});
+
+		if (!published) this.logger.warn(`Realtime notification publish skipped for ${notification._id.toString()}.`);
+	}
+
+	private shapeRealtimeNotification(notification: Notification): Record<string, unknown> {
+		return {
+			_id: notification._id.toString(),
+			recipientId: notification.recipientId.toString(),
+			senderId: notification.senderId?.toString(),
+			type: notification.type,
+			audience: notification.audience,
+			title: notification.title,
+			message: notification.message,
+			targetType: notification.targetType,
+			targetId: notification.targetId,
+			metadata: notification.metadata,
+			isRead: notification.isRead,
+			createdAt: notification.createdAt,
+		};
+	}
+
+	private getErrorMessage(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
 	}
 }

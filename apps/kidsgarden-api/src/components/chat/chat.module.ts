@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
+import { RedisModule } from '../redis/redis.module';
 import { ChatResolver } from './chat.resolver';
 import { ChatService } from './chat.service';
 import ApplicationSchema from '../../shemas/Application.model';
@@ -17,6 +18,7 @@ import MessageSchema from '../../shemas/Message.model';
 		MongooseModule.forFeature([{ name: 'Message', schema: MessageSchema }]),
 		AuthModule,
 		NotificationModule,
+		RedisModule,
 	],
 	providers: [ChatResolver, ChatService],
 	exports: [ChatService],

@@ -33,8 +33,9 @@
 | Staff/admin application approvals are transactional | Avoid partial role/application state | Requires replica-set-compatible Mongo configuration |
 | Recently visited uses view records | Correct behavior for visited list | Frontend UI still needs safe enablement |
 | Parent-to-kindergarten Application / Inquiry is a dedicated model | Separates enrollment/contact workflow from role approval workflows | Connected to notification events and persisted application chat; browser QA still needed |
-| Persisted application chat is the first chat surface | Kindergarten Application discussions need relationship permissions and history before realtime | Parent-teacher, group/class, and support chat remain later |
-| Notification delivery starts with GraphQL | The MVP needs reliable persistence, unread counts, and read state before realtime delivery | Redis/WebSocket notification fanout remains a later infrastructure phase |
+| Persisted application chat is the first chat surface | Kindergarten Application discussions need relationship permissions and history before broader chat surfaces | Parent-teacher, group/class, and support chat remain later |
+| Mongo and GraphQL remain source of truth for realtime flows | Realtime events should trigger private UI refreshes, not replace persisted state | Redis/WebSocket failures should not break application, chat, or notification workflows |
+| Redis/WebSocket delivers private realtime hints | Notifications and application chat now publish user-scoped events after Mongo persistence succeeds | Typing indicators, presence, chat files/images, advanced unread cache, and production Redis/TLS setup remain later |
 
 ## Frontend Decisions
 

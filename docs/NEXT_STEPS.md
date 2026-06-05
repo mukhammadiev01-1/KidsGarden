@@ -11,6 +11,7 @@
 | Confirm Super Admin application status updates | High | Admin runtime |
 | Confirm notification delivery for application created/status/canceled | High | Backend + frontend runtime |
 | Confirm application chat target navigation from notifications | High | Frontend runtime |
+| Confirm realtime application chat updates | High | Parent + Kindergarten Admin browsers |
 
 ## Approval Flows
 
@@ -38,21 +39,22 @@
 | Manual browser QA for NotificationBell with real accounts | High | Frontend runtime |
 | Verify unread count, mark one read, and mark all read | High | Backend + frontend runtime |
 | Verify connected event delivery for applications, application chat, role applications, and kindergarten comments | High | Backend + frontend runtime |
+| Verify realtime `notification.created` delivery | High | Backend + frontend runtime |
 | Add attendance notifications after attendance workflow QA | Medium | Backend + frontend |
 | Add comment reply notifications only after threaded comments exist | Medium | Backend + frontend |
 | Add comment-like notifications only after comment likes are clearly supported | Medium | Backend + frontend |
 | Add announcement/news notifications only after audience/follow rules are defined | Medium | Backend + frontend |
-| Add Redis/WebSocket realtime notification delivery | Later | Backend + frontend |
+| Verify Redis-stopped fallback | High | Backend + frontend runtime |
 
 ## Full Chat
 
 | Task | Priority |
 | --- | --- |
 | Manually QA scoped persisted application chat with real Parent and Kindergarten Admin accounts | High |
-| Add realtime delivery for persisted application chat | Medium |
+| Manually QA realtime application chat in two browser sessions | High |
 | Add read-state UI polish for application chat | Medium |
 | Support chat image attachments | Medium |
-| Add Redis-backed realtime infrastructure | Medium |
+| Add typing indicators and presence | Later |
 
 ## Social Login
 
@@ -109,6 +111,23 @@
 | Keep this docs snapshot updated after Application / Inquiry manual QA | Medium |
 | Add manual QA checklist | Medium |
 | Add deployment/env checklist | Medium |
+
+## Manual Realtime QA Checklist
+
+| Test | Steps | Expected Result |
+| --- | --- | --- |
+| Parent to Kindergarten Admin chat realtime | Open the same Kindergarten Application chat as Parent in one browser and Kindergarten Admin in another. Parent sends a text message. | Kindergarten Admin chat panel refetches and shows the new message without page refresh. |
+| Kindergarten Admin to Parent chat realtime | Keep both chats open. Kindergarten Admin sends a text message. | Parent chat panel refetches and shows the new message without page refresh. |
+| Notification bell realtime update | With recipient logged in, trigger a workflow that creates a notification, such as application status update or chat message. | Recipient unread count updates; if the dropdown is open, the list refetches. |
+| Refresh fallback | Reload the recipient page after messages/notifications exist. | GraphQL loads the persisted message/notification state even without relying on the realtime event. |
+| Redis stopped fallback | Stop local Redis and repeat a chat send or notification-producing workflow. | Main workflow still succeeds through Mongo/GraphQL; realtime update may be skipped until Redis is restored. |
+
+## Realtime Environment
+
+| Variable | Local Value | Notes |
+| --- | --- | --- |
+| `REDIS_URL` | `redis://localhost:6379` | Backend Redis pub/sub connection for realtime delivery. |
+| Frontend realtime URL | Derived from `REACT_APP_API_URL` | The browser client connects to `${REACT_APP_API_URL}/realtime` unless an explicit realtime WebSocket URL is configured. |
 
 ## Compatibility Cleanup
 

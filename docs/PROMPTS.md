@@ -123,6 +123,45 @@ Do not include child/document/comment/chat content in notification text.
 Report backend files, frontend files, privacy risks, and implementation order.
 ```
 
+## Realtime Integration QA
+
+```text
+KidsGarden Redis / Realtime Integration QA and bugfix pass.
+
+Work only in KidsGarden and KidsGarden-client.
+Do not redesign UI.
+Do not add typing indicators, presence, chat files/images, or new event types.
+Do not touch compatibility fields/routes.
+Do not use the old global floating Chat.tsx.
+
+Verify:
+- backend uses REDIS_URL, with local REDIS_URL=redis://localhost:6379
+- missing/down Redis does not break Mongo/GraphQL workflows
+- /realtime rejects missing, invalid, blocked, deleted, or inactive users
+- /realtime accepts valid authenticated users
+- no private payload is globally broadcast
+- notification.created publishes only after Mongo notification persistence
+- application_chat.message.created publishes only after Mongo message persistence
+- chat sender is excluded from realtime recipients
+- recipients are deduped
+- frontend connects only when authenticated and a token exists
+- token is not logged
+- socket disconnects when no subscribers remain
+- reconnect does not duplicate listeners
+- NotificationBell refetches unread count on notification.created
+- NotificationBell refetches list only when open
+- ApplicationChatPanel refetches only for matching conversationId
+- GraphQL remains the fallback/source of truth if socket is unavailable
+
+Run:
+- backend git diff --check
+- frontend git diff --check
+- backend yarn build
+- frontend yarn build
+
+Report issues found, fixes made, backend QA result, frontend QA result, manual browser QA checklist, remaining risks, and build results.
+```
+
 ## Chat Implementation Audit
 
 ```text

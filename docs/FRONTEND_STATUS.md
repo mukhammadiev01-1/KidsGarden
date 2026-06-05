@@ -53,11 +53,23 @@
 | NotificationBell | Implemented | Displays for authenticated users in the shared header. |
 | Unread count | Implemented | Uses backend unread-count query and refetches after read actions. |
 | Notification list | Implemented | Loads recent notifications in a simple dropdown with loading, error, and empty states. |
+| Realtime notification updates | Implemented | Authenticated users connect to `/realtime`; `notification.created` refetches unread count and refetches the list only when open. |
 | Mark one read | Implemented | Marks the selected notification as read, refetches count/list, then navigates when a target route exists. |
 | Mark all read | Implemented | Marks the authenticated user's unread notifications as read and refetches count/list. |
 | Target navigation | Implemented | Application and application chat route to My Applications; role applications route to mypage or Super Admin review pages; Kindergarten routes to kindergarten detail. |
 | Non-linked targets | Safe fallback | Comment, article/news, announcement, and system targets remain non-linked unless a safe target route is defined. |
 | Manual browser QA | Pending | Needs real account testing for delivery, read state, and target navigation. |
+
+## Realtime UI
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Realtime client | Implemented | `libs/realtime/realtimeClient.ts` opens a browser-only authenticated WebSocket to backend `/realtime` when subscribers exist. |
+| Realtime hook | Implemented | `libs/hooks/useRealtimeEvent.ts` subscribes components to named private realtime events and cleans up listeners. |
+| NotificationBell realtime | Implemented | Listens for `notification.created`; GraphQL remains the source of truth. |
+| ApplicationChatPanel realtime | Implemented | Listens for `application_chat.message.created` and refetches only when the active conversation matches. |
+| Socket fallback | Implemented | If the socket is unavailable, notification and chat workflows continue through GraphQL. |
+| Later realtime UI | Deferred | Typing indicators, online presence, chat file/image messages, and advanced unread cache are not implemented. |
 
 ## Mobile QA Targets
 
@@ -75,6 +87,6 @@
 | Notifications manual QA | High | Verify NotificationBell visibility, unread count, list, read actions, and target navigation with real accounts. |
 | Upload UI completion | High | Member/profile save and kindergarten image/gallery upload need verification and completion. |
 | Favorites/recently visited UI | Medium | Backend support exists; frontend components need safe KidsGarden cleanup before enabling. |
-| Realtime chat/notifications | Medium | Application chat and notifications are persisted through GraphQL; Redis/WebSocket realtime remains later. |
+| Realtime chat/notifications browser QA | High | Verify private socket connection, notification updates, chat refetches, and Redis-stopped fallback with real accounts. |
 | Mobile regression pass | Medium | Run after current feature changes settle. |
 | Visual polish | Low | Public pages are implemented; final manual polish can be staged separately. |

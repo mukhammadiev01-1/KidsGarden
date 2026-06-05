@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { Application } from '../../libs/dto/application/application';
@@ -16,9 +16,14 @@ import { capPaginationLimit } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { NotificationInput } from '../../libs/dto/notification/notification.input';
 import { NotificationService } from '../notification/notification.service';
+import { RedisService } from '../redis/redis.service';
+import { RealtimeService } from '../realtime/realtime.service';
+
+const APPLICATION_CHAT_MESSAGE_CREATED_EVENT = 'application_chat.message.created';
 
 @Injectable()
 export class ChatService {
+	private readonly logger = new Logger(ChatService.name);
 	private readonly messagesListMaxLimit = 100;
 	private readonly maxMessageLength = 2000;
 	private readonly messageSortFields = ['createdAt', 'updatedAt'];
@@ -29,6 +34,7 @@ export class ChatService {
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Message') private readonly messageModel: Model<ChatMessage>,
 		private readonly notificationService: NotificationService,
+		private readonly redisService: RedisService,
 	) {}
 
 	public async getOrCreateApplicationConversation(authMember: Member, applicationId: ObjectId): Promise<Conversation> {
@@ -121,6 +127,10 @@ export class ChatService {
 					lastMessageAt: message.createdAt,
 				})
 				.exec();
+
+			void this.publishApplicationChatMessageCreated(conversation, message).catch((err) => {
+				this.logger.warn(`Application chat realtime publish failed: ${this.getErrorMessage(err)}`);
+			});
 
 			void this.reserveApplicationChatMessageCreatedHooks(conversation, message).catch((err) => {
 				console.log('Application chat notification hook failed:', err.message);
@@ -259,6 +269,41 @@ export class ChatService {
 		);
 	}
 
+	private async publishApplicationChatMessageCreated(
+		conversation: Conversation,
+		message: ChatMessage,
+	): Promise<void> {
+		const recipientIds = this.uniqueObjectIds(conversation.participantIds ?? []).filter(
+			(memberId) => memberId.toString() !== message.senderId.toString(),
+		);
+		if (!recipientIds.length) return;
+
+		const published = await this.redisService.publish(RealtimeService.USER_CHANNEL, {
+			memberIds: recipientIds.map((memberId) => memberId.toString()),
+			eventName: APPLICATION_CHAT_MESSAGE_CREATED_EVENT,
+			payload: this.shapeRealtimeMessage(conversation, message),
+		});
+
+		if (!published) this.logger.warn(`Application chat realtime publish skipped for ${message._id.toString()}.`);
+	}
+
+	private shapeRealtimeMessage(conversation: Conversation, message: ChatMessage): Record<string, unknown> {
+		return {
+			_id: message._id.toString(),
+			conversationId: message.conversationId.toString(),
+			senderId: message.senderId.toString(),
+			text: message.text,
+			readBy: (message.readBy ?? []).map((memberId) => memberId.toString()),
+			createdAt: message.createdAt,
+			conversation: {
+				conversationId: conversation._id.toString(),
+				applicationId: conversation.applicationId.toString(),
+				kindergartenId: conversation.kindergartenId.toString(),
+				parentId: conversation.parentId.toString(),
+			},
+		};
+	}
+
 	private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {
 		const seen = new Set<string>();
 		return ids.filter((id) => {
@@ -275,5 +320,9 @@ export class ChatService {
 		if (leftIds.length !== rightIds.length) return false;
 
 		return leftIds.every((id, index) => id === rightIds[index]);
+	}
+
+	private getErrorMessage(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
 	}
 }
