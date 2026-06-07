@@ -1,6 +1,21 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, Int, ObjectType } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
 import { TotalCounter } from '../member/member';
+
+@ObjectType()
+export class ChatAttachment {
+	@Field(() => String)
+	url: string;
+
+	@Field(() => String)
+	name: string;
+
+	@Field(() => String)
+	mimeType: string;
+
+	@Field(() => Int)
+	size: number;
+}
 
 @ObjectType()
 export class Message {
@@ -13,8 +28,11 @@ export class Message {
 	@Field(() => String)
 	senderId: ObjectId;
 
-	@Field(() => String)
-	text: string;
+	@Field(() => String, { nullable: true })
+	text?: string;
+
+	@Field(() => [ChatAttachment], { nullable: true })
+	attachments?: ChatAttachment[];
 
 	@Field(() => [String])
 	readBy: ObjectId[];

@@ -28,6 +28,9 @@ export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg', 'image/we
 export const validApplicationDocumentMimeTypes = ['image/png', 'image/jpg', 'image/jpeg', 'application/pdf'];
 export const maxApplicationDocuments = 5;
 export const maxApplicationDocumentSize = 1 * 1024 * 1024;
+export const validChatImageMimeTypes = ['image/png', 'image/jpg', 'image/jpeg', 'image/webp'];
+export const maxChatImages = 3;
+export const maxChatImageSize = 1 * 1024 * 1024;
 export const getSerialForImage = (filename: string) => {
 	const ext = path.parse(filename).ext;
 	return uuidv4() + ext;

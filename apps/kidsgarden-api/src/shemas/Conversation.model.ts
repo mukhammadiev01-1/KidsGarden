@@ -11,7 +11,9 @@ const ConversationSchema = new Schema(
 
 		applicationId: {
 			type: Schema.Types.ObjectId,
-			required: true,
+			required: function () {
+				return this.type === ConversationType.APPLICATION_CHAT;
+			},
 			ref: 'Application',
 		},
 
@@ -24,6 +26,30 @@ const ConversationSchema = new Schema(
 		parentId: {
 			type: Schema.Types.ObjectId,
 			required: true,
+			ref: 'Member',
+		},
+
+		childId: {
+			type: Schema.Types.ObjectId,
+			required: function () {
+				return this.type === ConversationType.PARENT_TEACHER_CHAT;
+			},
+			ref: 'Child',
+		},
+
+		groupId: {
+			type: Schema.Types.ObjectId,
+			required: function () {
+				return this.type === ConversationType.PARENT_TEACHER_CHAT;
+			},
+			ref: 'Group',
+		},
+
+		teacherId: {
+			type: Schema.Types.ObjectId,
+			required: function () {
+				return this.type === ConversationType.PARENT_TEACHER_CHAT;
+			},
 			ref: 'Member',
 		},
 
@@ -56,6 +82,15 @@ ConversationSchema.index(
 	},
 );
 ConversationSchema.index({ applicationId: 1 });
+ConversationSchema.index(
+	{ type: 1, childId: 1, teacherId: 1 },
+	{
+		unique: true,
+		partialFilterExpression: { type: ConversationType.PARENT_TEACHER_CHAT },
+	},
+);
+ConversationSchema.index({ childId: 1, updatedAt: -1 });
+ConversationSchema.index({ teacherId: 1, updatedAt: -1 });
 ConversationSchema.index({ participantIds: 1, updatedAt: -1 });
 ConversationSchema.index({ kindergartenId: 1, updatedAt: -1 });
 ConversationSchema.index({ parentId: 1, updatedAt: -1 });

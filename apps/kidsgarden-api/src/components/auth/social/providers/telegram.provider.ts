@@ -31,8 +31,8 @@ interface TelegramJwk {
 
 @Injectable()
 export class TelegramProvider {
-	private readonly issuer = 'https://oauth.telegram.org';
-	private readonly jwksUrl = 'https://oauth.telegram.org/.well-known/jwks.json';
+	private readonly defaultIssuer = 'https://oauth.telegram.org';
+	private readonly defaultJwksUrl = 'https://oauth.telegram.org/.well-known/jwks.json';
 
 	public async verifyIdToken(idToken: string, nonce?: string): Promise<NormalizedSocialProfile> {
 		const telegramClientId = process.env.TELEGRAM_CLIENT_ID?.trim();
@@ -91,7 +91,7 @@ export class TelegramProvider {
 	}
 
 	private async getPublicKey(keyId: string): Promise<KeyObject> {
-		const response = await fetch(this.jwksUrl);
+		const response = await fetch(this.getJwksUrl());
 		if (!response.ok) throw new BadRequestException('Invalid Telegram token');
 
 		const jwks = (await response.json()) as { keys?: TelegramJwk[] };
@@ -105,11 +105,19 @@ export class TelegramProvider {
 		const now = Math.floor(Date.now() / 1000);
 		const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
 
-		if (payload.iss !== this.issuer) throw new BadRequestException('Invalid Telegram token');
+		if (payload.iss !== this.getIssuer()) throw new BadRequestException('Invalid Telegram token');
 		if (!audience.includes(clientId)) throw new BadRequestException('Invalid Telegram token');
 		if (!payload.sub) throw new BadRequestException('Invalid Telegram account');
 		if (!payload.exp || payload.exp <= now) throw new BadRequestException('Invalid Telegram token');
 		if (!payload.iat || payload.iat > now + 300) throw new BadRequestException('Invalid Telegram token');
 		if (nonce && payload.nonce !== nonce) throw new BadRequestException('Invalid Telegram token');
+	}
+
+	private getIssuer(): string {
+		return process.env.TELEGRAM_ISSUER?.trim() || this.defaultIssuer;
+	}
+
+	private getJwksUrl(): string {
+		return process.env.TELEGRAM_JWKS_URL?.trim() || this.defaultJwksUrl;
 	}
 }

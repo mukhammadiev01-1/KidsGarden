@@ -1,7 +1,27 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
+import { IsNotEmpty, IsOptional, Min } from 'class-validator';
 import type { ObjectId } from 'mongoose';
 import { Direction } from '../../enums/common.enum';
+
+@InputType()
+export class ChatAttachmentInput {
+	@IsNotEmpty()
+	@Field(() => String)
+	url: string;
+
+	@IsNotEmpty()
+	@Field(() => String)
+	name: string;
+
+	@IsNotEmpty()
+	@Field(() => String)
+	mimeType: string;
+
+	@IsNotEmpty()
+	@Min(1)
+	@Field(() => Int)
+	size: number;
+}
 
 @InputType()
 class MessageSearch {
@@ -41,8 +61,11 @@ export class SendMessageInput {
 	@Field(() => String)
 	conversationId: ObjectId;
 
-	@IsNotEmpty()
-	@Length(1, 2000)
-	@Field(() => String)
-	text: string;
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	text?: string;
+
+	@IsOptional()
+	@Field(() => [ChatAttachmentInput], { nullable: true })
+	attachments?: ChatAttachmentInput[];
 }

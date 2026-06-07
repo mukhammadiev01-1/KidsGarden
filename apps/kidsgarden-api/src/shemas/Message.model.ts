@@ -16,7 +16,30 @@ const MessageSchema = new Schema(
 
 		text: {
 			type: String,
-			required: true,
+		},
+
+		attachments: {
+			type: [
+				{
+					url: {
+						type: String,
+						required: true,
+					},
+					name: {
+						type: String,
+						required: true,
+					},
+					mimeType: {
+						type: String,
+						required: true,
+					},
+					size: {
+						type: Number,
+						required: true,
+					},
+				},
+			],
+			default: [],
 		},
 
 		readBy: {

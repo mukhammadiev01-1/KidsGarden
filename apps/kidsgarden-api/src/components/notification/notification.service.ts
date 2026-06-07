@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { capPaginationLimit } from '../../libs/config';
@@ -59,7 +59,7 @@ export class NotificationService {
 		const result = await this.notificationModel
 			.findOneAndUpdate({ _id: notificationId, recipientId: authMember._id }, { isRead: true }, { new: true })
 			.exec();
-		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (!result) throw new ForbiddenException(Message.NOT_ALLOWED_REQUEST);
 
 		return true;
 	}

@@ -10,14 +10,23 @@ export class Conversation {
 	@Field(() => ConversationType)
 	type: ConversationType;
 
-	@Field(() => String)
-	applicationId: ObjectId;
+	@Field(() => String, { nullable: true })
+	applicationId?: ObjectId;
 
 	@Field(() => String)
 	kindergartenId: ObjectId;
 
 	@Field(() => String)
 	parentId: ObjectId;
+
+	@Field(() => String, { nullable: true })
+	childId?: ObjectId;
+
+	@Field(() => String, { nullable: true })
+	groupId?: ObjectId;
+
+	@Field(() => String, { nullable: true })
+	teacherId?: ObjectId;
 
 	@Field(() => [String])
 	participantIds: ObjectId[];

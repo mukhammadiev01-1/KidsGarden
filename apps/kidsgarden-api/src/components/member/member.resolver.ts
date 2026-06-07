@@ -22,8 +22,11 @@ import {
 	getSerialForImage,
 	maxApplicationDocumentSize,
 	maxApplicationDocuments,
+	maxChatImageSize,
+	maxChatImages,
 	shapeIntoMongoObjectId,
 	validApplicationDocumentMimeTypes,
+	validChatImageMimeTypes,
 	validMimeTypes,
 } from '../../libs/config';
 import { WithoutGuard } from '../auth/guards/without.guard';
@@ -32,12 +35,14 @@ import { createWriteStream, mkdirSync, unlinkSync } from 'fs';
 import * as path from 'path';
 import { Message } from '../../libs/enums/common.enum';
 import { ApplicationDocument } from '../../libs/dto/application/application';
+import { ChatAttachment } from '../../libs/dto/message/message';
 
 
 @Resolver() // bu class GraphQL resolver ekanini bildiradi
 export class MemberResolver {
 	private readonly allowedUploadTargets = new Set(['member', 'article', 'property', 'kindergarten']);
 	private readonly applicationDocumentTarget = 'application';
+	private readonly chatImageTarget = 'chat';
 
 	  constructor(private readonly memberService: MemberService) {} // service ni dependency injection orqali oladi
 
@@ -321,6 +326,42 @@ public async updateMemberByAdmin(
 		}
 	}
 
+@UseGuards(AuthGuard)
+@Mutation(() => [ChatAttachment])
+	public async chatImagesUploader(
+		@Args('files', { type: () => [GraphQLUpload] })
+		files: Promise<FileUpload>[],
+	): Promise<ChatAttachment[]> {
+		console.log('Mutation: chatImagesUploader');
+
+		if (!Array.isArray(files) || !files.length || files.length > maxChatImages) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		const uploadedImages: ChatAttachment[] = [];
+		const uploadedFilePaths: string[] = [];
+
+		try {
+			for (const file of files) {
+				const { attachment, filePath } = await this.writeChatImage(await file);
+				uploadedImages.push(attachment);
+				uploadedFilePaths.push(filePath);
+			}
+
+			return uploadedImages;
+		} catch (err) {
+			uploadedFilePaths.forEach((filePath) => {
+				try {
+					unlinkSync(filePath);
+				} catch (cleanupErr) {
+					console.log('Chat image cleanup failed:', cleanupErr?.message);
+				}
+			});
+
+			throw err;
+		}
+	}
+
 	private async writeApplicationDocument(
 		{ createReadStream, filename, mimetype }: FileUpload,
 	): Promise<{ document: ApplicationDocument; filePath: string }> {
@@ -373,6 +414,65 @@ public async updateMemberByAdmin(
 				unlinkSync(filePath);
 			} catch (cleanupErr) {
 				console.log('Application document cleanup failed:', cleanupErr?.message);
+			}
+
+			if (err instanceof BadRequestException) throw err;
+			throw new Error(Message.UPLOAD_FAILED);
+		}
+	}
+
+	private async writeChatImage(
+		{ createReadStream, filename, mimetype }: FileUpload,
+	): Promise<{ attachment: ChatAttachment; filePath: string }> {
+		if (!filename || !mimetype || typeof createReadStream !== 'function') {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+		if (!validChatImageMimeTypes.includes(mimetype)) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		const fileName = getSerialForImage(filename);
+		const { url, filePath } = this.buildUploadDestination(this.chatImageTarget, fileName);
+		let size = 0;
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const stream = createReadStream();
+				const writeStream = createWriteStream(filePath);
+
+				stream.on('data', (chunk: Buffer) => {
+					size += chunk.length;
+					if (size > maxChatImageSize) {
+						stream.destroy();
+						writeStream.destroy();
+						reject(new BadRequestException(Message.BAD_REQUEST));
+					}
+				});
+				stream.on('error', () => reject(new Error(Message.UPLOAD_FAILED)));
+				writeStream.on('finish', () => resolve());
+				writeStream.on('error', () => reject(new Error(Message.UPLOAD_FAILED)));
+
+				stream.pipe(writeStream);
+			});
+
+			if (size <= 0 || size > maxChatImageSize) {
+				throw new BadRequestException(Message.BAD_REQUEST);
+			}
+
+			return {
+				attachment: {
+					url,
+					name: filename,
+					mimeType: mimetype,
+					size,
+				},
+				filePath,
+			};
+		} catch (err) {
+			try {
+				unlinkSync(filePath);
+			} catch (cleanupErr) {
+				console.log('Chat image cleanup failed:', cleanupErr?.message);
 			}
 
 			if (err instanceof BadRequestException) throw err;

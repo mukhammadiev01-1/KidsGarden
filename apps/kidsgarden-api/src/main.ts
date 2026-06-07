@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -6,6 +7,17 @@ import { graphqlUploadExpress } from 'graphql-upload';
 import * as express from 'express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { join } from 'path';
+
+function getPort(envValue: string | undefined, fallbackPort: number): number {
+	if (!envValue) return fallbackPort;
+
+	const port = Number(envValue);
+	if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+		throw new Error(`Invalid PORT_API value "${envValue}". Expected a numeric port, e.g. ${fallbackPort}.`);
+	}
+
+	return port;
+}
 
 async function bootstrap() {
 	// NestJS ilovasini yaratish uchun bootstrap funksiyasi
@@ -17,6 +29,6 @@ async function bootstrap() {
 	app.use(graphqlUploadExpress({ maxFileSize: 15000000, maxFiles: 10 })); // GraphQL orqali file upload ni qo'llab-quvvatlaydi, maxFileSize va maxFiles ni belgilaydi
 	app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 	app.useWebSocketAdapter(new WsAdapter(app)); // WebSocket adapterini qo'llaydi, bu WebSocket orqali real-time kommunikatsiyani ta'minlaydi
-	await app.listen(process.env.PORT_API ?? 3000); // ilovani belgilangan portda ishga tushiradi, PORT_API muhit o'zgaruvchisi bo'lmasa 3000 portida ishga tushadi
+	await app.listen(getPort(process.env.PORT_API, 3000)); // ilovani belgilangan portda ishga tushiradi, PORT_API muhit o'zgaruvchisi bo'lmasa 3000 portida ishga tushadi
 }
 bootstrap();
