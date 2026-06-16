@@ -21,6 +21,12 @@ export class Kindergarten {
 	@Field(() => String)
 	kindergartenAddress: string;
 
+	@Field(() => Number, { nullable: true })
+	kindergartenLatitude?: number;
+
+	@Field(() => Number, { nullable: true })
+	kindergartenLongitude?: number;
+
 	@Field(() => String)
 	kindergartenTitle: string;
 

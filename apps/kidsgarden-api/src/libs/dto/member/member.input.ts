@@ -1,6 +1,6 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
 import { IsIn, IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
-import { MemberAuthType, MemberStatus, MemberType } from '../../enums/member.enum';
+import { KakaoAuthIntent, MemberAuthType, MemberStatus, MemberType, TelegramAuthIntent } from '../../enums/member.enum';
 import { availableKindergartenAdminSorts, availableMemberSorts } from '../../config';
 import { Direction } from '../../enums/common.enum';
 import { PreviewMemberPurpose } from '../../enums/member-preview.enum';
@@ -55,11 +55,51 @@ export class GoogleLoginInput {
 export class TelegramLoginInput {
   @IsNotEmpty()
   @Field(() => String)
-  idToken: string;
+  id: string;
 
   @IsOptional()
   @Field(() => String, { nullable: true })
-  nonce?: string;
+  firstName?: string;
+
+  @IsOptional()
+  @Field(() => String, { nullable: true })
+  lastName?: string;
+
+  @IsOptional()
+  @Field(() => String, { nullable: true })
+  username?: string;
+
+  @IsOptional()
+  @Field(() => String, { nullable: true })
+  photoUrl?: string;
+
+  @IsNotEmpty()
+  @Min(1)
+  @Field(() => Int)
+  authDate: number;
+
+  @IsNotEmpty()
+  @Field(() => String)
+  hash: string;
+
+  @IsNotEmpty()
+  @Field(() => TelegramAuthIntent)
+  intent: TelegramAuthIntent;
+}
+
+@InputType()
+export class KakaoLoginInput {
+  @IsNotEmpty()
+  @Field(() => String)
+  code: string;
+
+  @IsNotEmpty()
+  @Field(() => String)
+  redirectUri: string;
+
+  @IsNotEmpty()
+  @Field(() => KakaoAuthIntent)
+  intent: KakaoAuthIntent;
 }
 
 @InputType()

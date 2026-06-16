@@ -27,6 +27,8 @@ export class Member {
 
 	telegramId?: string;
 
+	kakaoId?: string;
+
 	@Field(() => String)
 	memberNick: string;
 

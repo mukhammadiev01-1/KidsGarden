@@ -1,123 +1,103 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
-import { createPublicKey, createVerify, JsonWebKey, KeyObject } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { TelegramLoginInput } from '../../../../libs/dto/member/member.input';
 import { NormalizedSocialProfile, SocialProvider } from '../social-auth.types';
-
-interface TelegramJwtHeader {
-	alg?: string;
-	kid?: string;
-	typ?: string;
-}
-
-interface TelegramJwtPayload {
-	iss?: string;
-	aud?: string | string[];
-	sub?: string;
-	exp?: number;
-	iat?: number;
-	nonce?: string;
-	name?: string;
-	preferred_username?: string;
-	picture?: string;
-}
-
-interface TelegramJwk {
-	kid?: string;
-	kty?: string;
-	use?: string;
-	alg?: string;
-	n?: string;
-	e?: string;
-}
 
 @Injectable()
 export class TelegramProvider {
-	private readonly defaultIssuer = 'https://oauth.telegram.org';
-	private readonly defaultJwksUrl = 'https://oauth.telegram.org/.well-known/jwks.json';
+	private readonly maxAuthAgeSeconds = 24 * 60 * 60;
 
-	public async verifyIdToken(idToken: string, nonce?: string): Promise<NormalizedSocialProfile> {
-		const telegramClientId = process.env.TELEGRAM_CLIENT_ID?.trim();
-		if (!telegramClientId) throw new InternalServerErrorException('Telegram login is not configured');
+	public verifyLoginWidgetAuth(input: TelegramLoginInput): NormalizedSocialProfile {
+		const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim() || process.env.TELEGRAM_CLIENT_SECRET?.trim();
+		if (!botToken) throw new InternalServerErrorException('Telegram login is not configured');
 
 		try {
-			const [encodedHeader, encodedPayload, encodedSignature] = idToken.split('.');
-			if (!encodedHeader || !encodedPayload || !encodedSignature) {
-				throw new BadRequestException('Invalid Telegram token');
-			}
-
-			const header = this.decodeJwtPart<TelegramJwtHeader>(encodedHeader);
-			const payload = this.decodeJwtPart<TelegramJwtPayload>(encodedPayload);
-
-			if (header.alg !== 'RS256' || !header.kid) throw new BadRequestException('Invalid Telegram token');
-
-			await this.verifySignature({
-				encodedHeader,
-				encodedPayload,
-				encodedSignature,
-				keyId: header.kid,
+			this.logTelegramDiagnostic('classic-widget', {
+				callbackKeys: this.getSafeCallbackKeys(input),
 			});
-			this.verifyClaims(payload, telegramClientId, nonce);
+
+			this.validateAuthDataShape(input);
+			this.validateAuthDate(input.authDate);
+			this.validateHash(input, botToken);
+
+			this.logTelegramDiagnostic('verification', { success: true });
 
 			return {
 				provider: SocialProvider.TELEGRAM,
-				providerUserId: payload.sub!,
+				providerUserId: String(input.id),
 				emailVerified: false,
-				displayName: payload.name || payload.preferred_username,
-				avatar: payload.picture,
+				displayName: [input.firstName, input.lastName].filter(Boolean).join(' ') || input.username,
+				avatar: input.photoUrl,
 			};
 		} catch (err) {
-			if (err instanceof InternalServerErrorException || err instanceof BadRequestException) throw err;
-			throw new BadRequestException('Invalid Telegram token');
+			if (err instanceof InternalServerErrorException || err instanceof BadRequestException) {
+				this.logTelegramDiagnostic('verification', {
+					success: false,
+					reason: err.message,
+				});
+				throw err;
+			}
+			this.logTelegramDiagnostic('verification', {
+				success: false,
+				reason: 'Invalid Telegram auth data',
+			});
+			throw new BadRequestException('Invalid Telegram auth data');
 		}
 	}
 
-	private decodeJwtPart<T>(encodedPart: string): T {
-		const decodedPart = Buffer.from(encodedPart, 'base64url').toString('utf8');
-		return JSON.parse(decodedPart) as T;
+	private validateAuthDataShape(input: TelegramLoginInput): void {
+		if (!input.id?.trim()) throw new BadRequestException('Invalid Telegram account');
+		if (!input.hash?.trim()) throw new BadRequestException('Invalid Telegram auth data');
+		if (!Number.isFinite(Number(input.authDate))) throw new BadRequestException('Invalid Telegram auth data');
 	}
 
-	private async verifySignature(input: {
-		encodedHeader: string;
-		encodedPayload: string;
-		encodedSignature: string;
-		keyId: string;
-	}): Promise<void> {
-		const publicKey = await this.getPublicKey(input.keyId);
-		const verifier = createVerify('RSA-SHA256');
-		verifier.update(`${input.encodedHeader}.${input.encodedPayload}`);
-		verifier.end();
-
-		const isValid = verifier.verify(publicKey, Buffer.from(input.encodedSignature, 'base64url'));
-		if (!isValid) throw new BadRequestException('Invalid Telegram token');
-	}
-
-	private async getPublicKey(keyId: string): Promise<KeyObject> {
-		const response = await fetch(this.getJwksUrl());
-		if (!response.ok) throw new BadRequestException('Invalid Telegram token');
-
-		const jwks = (await response.json()) as { keys?: TelegramJwk[] };
-		const jwk = jwks.keys?.find((key) => key.kid === keyId);
-		if (!jwk) throw new BadRequestException('Invalid Telegram token');
-
-		return createPublicKey({ key: jwk as JsonWebKey, format: 'jwk' });
-	}
-
-	private verifyClaims(payload: TelegramJwtPayload, clientId: string, nonce?: string): void {
+	private validateAuthDate(authDate: number): void {
 		const now = Math.floor(Date.now() / 1000);
-		const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+		const authTimestamp = Number(authDate);
 
-		if (payload.iss !== this.getIssuer()) throw new BadRequestException('Invalid Telegram token');
-		if (!audience.includes(clientId)) throw new BadRequestException('Invalid Telegram token');
-		if (!payload.sub) throw new BadRequestException('Invalid Telegram account');
-		if (!payload.exp || payload.exp <= now) throw new BadRequestException('Invalid Telegram token');
-		if (!payload.iat || payload.iat > now + 300) throw new BadRequestException('Invalid Telegram token');
-		if (nonce && payload.nonce !== nonce) throw new BadRequestException('Invalid Telegram token');
+		if (authTimestamp > now + 300) throw new BadRequestException('Invalid Telegram auth data');
+		if (now - authTimestamp > this.maxAuthAgeSeconds) {
+			throw new BadRequestException('Telegram authorization expired. Please try again.');
+		}
 	}
 
-	private getIssuer(): string {
-		return process.env.TELEGRAM_ISSUER?.trim() || this.defaultIssuer;
+	private validateHash(input: TelegramLoginInput, botToken: string): void {
+		const dataCheckString = this.buildDataCheckString(input);
+		const secretKey = createHash('sha256').update(botToken).digest();
+		const computedHash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+		const providedHash = input.hash.trim();
+
+		const computedBuffer = Buffer.from(computedHash, 'hex');
+		const providedBuffer = Buffer.from(providedHash, 'hex');
+
+		if (computedBuffer.length !== providedBuffer.length || !timingSafeEqual(computedBuffer, providedBuffer)) {
+			throw new BadRequestException('Invalid Telegram auth data');
+		}
 	}
 
-	private getJwksUrl(): string {
-		return process.env.TELEGRAM_JWKS_URL?.trim() || this.defaultJwksUrl;
+	private buildDataCheckString(input: TelegramLoginInput): string {
+		const authData: Record<string, string> = {
+			auth_date: String(input.authDate),
+			id: String(input.id),
+		};
+
+		if (input.firstName) authData.first_name = input.firstName;
+		if (input.lastName) authData.last_name = input.lastName;
+		if (input.username) authData.username = input.username;
+		if (input.photoUrl) authData.photo_url = input.photoUrl;
+
+		return Object.keys(authData)
+			.sort()
+			.map((key) => `${key}=${authData[key]}`)
+			.join('\n');
+	}
+
+	private getSafeCallbackKeys(input: TelegramLoginInput): string[] {
+		return Object.keys(input).filter((key) => key !== 'hash');
+	}
+
+	private logTelegramDiagnostic(stage: string, info: Record<string, unknown>): void {
+		if (process.env.NODE_ENV === 'production') return;
+		console.log(`[Telegram Login ${stage}]`, info);
 	}
 }

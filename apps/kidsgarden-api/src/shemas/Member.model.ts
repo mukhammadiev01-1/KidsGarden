@@ -46,6 +46,12 @@ export const MemberSchema = new Schema(
    select: false,
   },
 
+  kakaoId: {
+   type: String,
+   index: { unique: true, sparse: true },
+   select: false,
+  },
+
   memberNick: {
    type: String,
    index: { unique: true, sparse: true },

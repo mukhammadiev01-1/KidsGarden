@@ -1,6 +1,7 @@
 export enum SocialProvider {
 	GOOGLE = 'GOOGLE',
 	TELEGRAM = 'TELEGRAM',
+	KAKAO = 'KAKAO',
 }
 
 export interface NormalizedSocialProfile {

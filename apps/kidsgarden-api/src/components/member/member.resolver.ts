@@ -3,6 +3,7 @@ import { MemberService } from './member.service'; // member service business log
 import { BadRequestException, UseGuards } from '@nestjs/common'; // validation va error handling uchun import
 import {
 	GoogleLoginInput,
+	KakaoLoginInput,
 	KindergartenAdminsInquiry,
 	LoginInput,
 	MemberInput,
@@ -115,6 +116,12 @@ export class MemberResolver {
   public async telegramLogin(@Args('input') input: TelegramLoginInput): Promise<Member> {
     console.log('Mutation: telegramLogin');
     return await this.memberService.telegramLogin(input);
+  }
+
+  @Mutation(() => Member)
+  public async kakaoLogin(@Args('input') input: KakaoLoginInput): Promise<Member> {
+    console.log('Mutation: kakaoLogin');
+    return await this.memberService.kakaoLogin(input);
   }
   
 @UseGuards(AuthGuard)

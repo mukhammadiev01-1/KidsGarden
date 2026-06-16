@@ -26,6 +26,14 @@ const KindergartenSchema = new Schema(
 			required: true,
 		},
 
+		kindergartenLatitude: {
+			type: Number,
+		},
+
+		kindergartenLongitude: {
+			type: Number,
+		},
+
 		kindergartenTitle: {
 			type: String,
 			required: true,

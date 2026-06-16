@@ -1,5 +1,5 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsInt, IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, Length, Max, Min } from 'class-validator';
 import { KindergartenLocation, KindergartenStatus, KindergartenType } from '../../enums/kindergarten.enum';
 import type { ObjectId } from 'mongoose';
 
@@ -25,6 +25,18 @@ export class KindergartenUpdate {
   @Length(3, 100)
   @Field(() => String, { nullable: true })
   kindergartenAddress?: string;
+
+  @IsOptional()
+  @Min(-90)
+  @Max(90)
+  @Field(() => Number, { nullable: true })
+  kindergartenLatitude?: number;
+
+  @IsOptional()
+  @Min(-180)
+  @Max(180)
+  @Field(() => Number, { nullable: true })
+  kindergartenLongitude?: number;
 
   @IsOptional()
   @Length(3, 100)

@@ -10,6 +10,7 @@ import { Model, ObjectId } from 'mongoose'; // Mongoose Model type ni import qil
 import { Member, MemberPreview, Members, PublicMember, PublicMembers } from '../../libs/dto/member/member'; // Member dto type ni import qiladi
 import {
 	GoogleLoginInput,
+	KakaoLoginInput,
 	KindergartenAdminsInquiry,
 	LoginInput,
 	MemberInput,
@@ -99,6 +100,10 @@ export class MemberService {
 
 	public async telegramLogin(input: TelegramLoginInput): Promise<Member> {
 		return this.socialAuthService.telegramLogin(input);
+	}
+
+	public async kakaoLogin(input: KakaoLoginInput): Promise<Member> {
+		return this.socialAuthService.kakaoLogin(input);
 	}
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {

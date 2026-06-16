@@ -26,8 +26,27 @@ export enum MemberAuthType {
   EMAIL = 'EMAIL',
   GOOGLE = 'GOOGLE',
   TELEGRAM = 'TELEGRAM',
+  KAKAO = 'KAKAO',
 }
 
 registerEnumType(MemberAuthType, {
   name: 'MemberAuthType',
+});
+
+export enum KakaoAuthIntent {
+  LOGIN = 'LOGIN',
+  SIGNUP = 'SIGNUP',
+}
+
+registerEnumType(KakaoAuthIntent, {
+  name: 'KakaoAuthIntent',
+});
+
+export enum TelegramAuthIntent {
+  LOGIN = 'LOGIN',
+  SIGNUP = 'SIGNUP',
+}
+
+registerEnumType(TelegramAuthIntent, {
+  name: 'TelegramAuthIntent',
 });

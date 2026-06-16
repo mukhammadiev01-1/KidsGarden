@@ -1,98 +1,144 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# KidsGarden Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+KidsGarden backend is a NestJS GraphQL API for kindergarten discovery, parent applications, role approval, private chat, notifications, uploads, maps data, and social authentication.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The API app lives in `apps/kidsgarden-api`. The batch app lives in `apps/kidsgarden-batch`.
 
-## Description
+## Prerequisites
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Node.js compatible with the project dependencies
+- Yarn or npm
+- MongoDB
+- Redis for realtime pub/sub
+- Provider credentials for enabled social login flows
 
-## Project setup
+## Install
 
 ```bash
-$ npm install
+yarn install
 ```
 
-## Compile and run the project
+or:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
+## Environment
+
+Create `.env` from `.env.example` and fill in local or deployment values.
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+cp .env.example .env
 ```
 
-## Deployment
+Required local defaults:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- API: `PORT_API=3000`
+- Batch: `PORT_BATCH=3001`
+- Redis: `REDIS_URL=redis://localhost:6379`
+- GraphQL: `http://127.0.0.1:3000/graphql`
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Do not commit `.env`. Use placeholder values in documentation and examples only.
+
+## Local Startup
+
+Start the API:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+yarn start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Start the batch app when needed:
 
-## Resources
+```bash
+yarn start:dev:batch
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Production-style API start after build:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+yarn build
+yarn start:prod
+```
 
-## Support
+## Build
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+yarn build
+```
 
-## Stay in touch
+## GraphQL
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Local GraphQL endpoint:
 
-## License
+```text
+http://127.0.0.1:3000/graphql
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Apollo playground is enabled by the current backend configuration.
+
+## Uploads
+
+Uploaded files are stored under `uploads/` and served statically from:
+
+```text
+http://127.0.0.1:3000/uploads/...
+```
+
+Current upload areas include member images, kindergarten images, article images, kindergarten application documents, and chat images. MongoDB remains the source of truth for saved upload paths.
+
+## Redis And Realtime
+
+Redis is used for realtime pub/sub delivery only. It does not replace MongoDB persistence.
+
+Local Redis example:
+
+```env
+REDIS_URL=redis://localhost:6379
+```
+
+The private realtime gateway is available at:
+
+```text
+ws://127.0.0.1:3000/realtime
+```
+
+JWT authentication is required for private realtime connections.
+
+## Social Auth Backend Setup
+
+Google:
+
+- Set `GOOGLE_CLIENT_ID`.
+- Backend verifies Google ID tokens server-side.
+
+Kakao:
+
+- Set `KAKAO_REST_API_KEY`.
+- Set `KAKAO_CLIENT_SECRET` only if Kakao Client Secret is enabled.
+- Backend exchanges authorization codes server-side.
+
+Telegram:
+
+- Set `TELEGRAM_BOT_TOKEN`.
+- Backend verifies classic Telegram Login Widget hash server-side.
+
+Social signup creates `PARENT` users only. Existing users keep their database `memberType`. Teacher and Kindergarten Admin access requires approval. Super Admin is internal only.
+
+## Security Notes
+
+- Never commit `.env`, provider secrets, JWT secrets, MongoDB credentials, Redis credentials, or screenshots containing secrets.
+- Rotate exposed keys or tokens immediately.
+- Do not put Kakao Admin keys in frontend code or public environment variables.
+- Frontend social auth must never send `memberType` or role.
+- Redis/WebSocket events are realtime hints; MongoDB remains the source of truth.
+
+## Useful Commands
+
+```bash
+yarn build
+yarn start:dev
+yarn start:dev:batch
+git diff --check
+```

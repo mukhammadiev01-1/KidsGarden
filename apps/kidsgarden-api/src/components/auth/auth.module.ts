@@ -7,6 +7,7 @@ import MemberSchema from '../../shemas/Member.model';
 import { SocialAuthService } from './social/social-auth.service';
 import { GoogleProvider } from './social/providers/google.provider';
 import { TelegramProvider } from './social/providers/telegram.provider';
+import { KakaoProvider } from './social/providers/kakao.provider';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { TelegramProvider } from './social/providers/telegram.provider';
       signOptions: { expiresIn: '30d' },
     }),
   ],
-  providers: [AuthService, SocialAuthService, GoogleProvider, TelegramProvider],
+  providers: [AuthService, SocialAuthService, GoogleProvider, TelegramProvider, KakaoProvider],
   exports: [AuthService, SocialAuthService],
 })
 export class AuthModule {}
