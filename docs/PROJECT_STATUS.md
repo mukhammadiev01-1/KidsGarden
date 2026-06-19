@@ -1,6 +1,6 @@
 # KidsGarden Project Status
 
-Last updated: 2026-06-16
+Last updated: 2026-06-20
 
 This document summarizes the current implemented state across the backend repository and the sibling `KidsGarden-client` frontend. It separates implemented code from browser-verified work and manual QA that is still pending.
 
@@ -31,6 +31,11 @@ This document summarizes the current implemented state across the backend reposi
 | Homepage hero video work | Implemented. Desktop homepage hero uses `/videos/kidsgarden-hero.mp4`, removes the homepage search/filter bar, disables legacy hero media layers, and keeps four feature cards in a clean row. |
 | Homepage dynamic kindergarten showcase | Implemented in `KidsGarden-client`. Homepage renders one `Popular Kindergartens` showcase from database records using `getKindergartens` with active-kindergarten backend filtering, `limit: 3`, and `kindergartenViews DESC`. The title matches the popularity-based selection logic. |
 | Homepage Communication Roadmap | Implemented in `KidsGarden-client`. The roadmap remains visible with Private Chat marked `Available`; Auto Translation, In-app Calls, and Daily Reports & Albums remain `Coming Soon`. |
+| Homepage lower-section visual rhythm | Implemented in `KidsGarden-client` for desktop. Popular Kindergartens, Communication Roadmap, KidsGarden Store, Parent Community Highlights, Final CTA, and Footer now share the 1180px desktop rhythm, stronger card scale, aligned headings, and cleaner lower-section spacing without changing homepage hero or business logic. |
+| `/kindergartens` discovery controls | Implemented in `KidsGarden-client`. Desktop grid/list view toggle now uses real buttons and local view state, list mode renders the same real kindergarten records in full-width rows, map preset tabs apply real sort behavior, `Top Rated` was renamed to `Top Rank` because `kindergartenRank` is rank-based rather than review-rating data, and `New` now sorts by `createdAt DESC`. |
+| Kindergarten detail controls | Implemented in `KidsGarden-client`. `See all photos` scrolls to the real gallery when `kindergartenImages` exist and is hidden when no gallery images exist. Hero and sidebar `Contact Center` use the existing parent application/contact flow, preserving login and parent-role requirements. `Request a Visit` uses the same real application flow with visit-intent helper text for eligible parents and does not create a fake booking. |
+| Login/register desktop QA | Browser-checked in `KidsGarden-client` at 1280x1000. `/account/login` now resolves through the existing login-mode auth page, `/account/join?mode=register` renders the parent-only public registration flow, the old auth logo/background treatment was removed from the auth surface, the dead forgot-password link is marked as coming soon, local Telegram provider mismatch renders as a disabled explanatory control, and form validation remains native HTML required-field validation. |
+| My Page first fix pass | Implemented in `KidsGarden-client`. Unauthenticated `/mypage` now redirects to the existing login flow, Super Admin redirect to `/_admin` is preserved, the desktop My Page shell was moved toward the KidsGarden 1180px green/cream style, the profile form no longer requires a custom image before saving text fields, role request copy now says access/request rather than implying instant role grants, and fallback dummy sections/controls are marked Coming Soon or disabled instead of acting live. |
 
 ## Implemented But Awaiting Manual QA
 
@@ -49,13 +54,32 @@ This document summarizes the current implemented state across the backend reposi
 | Kakao Maps | Listing markers, detail marker, coordinate editor, and address search with real Kakao SDK configuration. |
 | Notifications | Unread count, recent list, mark one read, mark all read, navigation targets, and realtime updates. |
 | Responsive UI repairs | Page-by-page screenshot pass is still needed outside the latest desktop homepage hero check. |
+| My Page authenticated role views | Browser QA with real Parent, Teacher, Kindergarten Admin, and Super Admin sessions. Current My Page first pass was browser-checked only for unauthenticated redirect because no valid local session was available in the QA browser profile. |
 
 ## Known Warnings
 
 - Frontend build may print Apollo Client warning URLs during static generation. These are warnings observed during build output, not build failures.
 - Frontend build may print `react-i18next:: You will need to pass in an i18next instance...` during static generation. This is currently a known warning and should be investigated separately if it affects runtime localization.
+- Desktop homepage browser QA still reports the existing local realtime warning `WebSocket connection to 'ws://127.0.0.1:3007/?token=' failed`. Realtime configuration is outside the homepage visual polish scope.
 - Compatibility naming remains in some routes, DTO fields, upload targets, and CSS comments for old `/property` compatibility. New work should use KidsGarden kindergarten terminology.
 - Manual provider QA requires real configured Google, Kakao, Telegram, Kakao Maps, Redis, and upload environments.
+
+## Future Planned Features
+
+| Feature | Planned scope |
+| --- | --- |
+| Messages Inbox / MessageBell | Planned future feature. This must not replace existing contextual chats in child detail / teacher context, parent dashboard, teacher dashboard, application detail, kindergarten admin context, Parent-Teacher Chat, or Application Chat. The goal is to add a header message icon next to the notification bell, show an unread message count that is separate from general notifications, and open a unified `/messages` inbox. `/messages` should aggregate existing Application chats, Parent-Teacher chats, and future chat types without duplicating message storage. Conversation items should show participant name, kindergarten context, child context, conversation type label, last message preview, last message time, unread count, and avatar/image where available. Clicking a conversation should open the existing chat flow. Realtime unread badges should update when WebSocket/realtime is available, while API load/refetch should still provide unread counts when realtime is unavailable. MongoDB remains the source of truth; Redis/realtime is only for live updates. |
+
+### Messages Inbox / MessageBell Investigation Notes
+
+- Audit ApplicationChat model/query.
+- Audit ParentTeacherChat model/query.
+- Check if unread/read tracking exists through fields such as `readBy`, `seenAt`, `isRead`, or equivalent.
+- Design a unified conversation summary query if missing.
+- Create a `MessageBell` component.
+- Create a `/messages` page.
+- Avoid duplicating message storage.
+- Keep the known realtime warning `ws://127.0.0.1:3007/?token=` tracked separately from this feature.
 
 ## Current Visual QA Status
 
@@ -63,11 +87,12 @@ This document summarizes the current implemented state across the backend reposi
 | --- | --- |
 | Homepage desktop hero at 1280x1000 | Browser screenshot inspected at `/tmp/kg-home-polish-1280.png`. Current result: video visible, old property/building imagery not visible, no homepage search/filter bar, headline/subtitle visible, CTA buttons aligned, four cards equal/readable on a clean surface, and "Built for every role" starts on clean cream background. |
 | Homepage dynamic showcase and roadmap at 1280px desktop | Browser screenshot inspected at `/tmp/kg-home-dynamic-full-1280.png`. Current completed result: desktop hero video is preserved, old Nestar/property background layers are removed, homepage search bar is removed, one dynamic `Popular Kindergartens` section renders real `ACTIVE` database records through `kindergartenViews DESC` with `limit: 3`, Communication Roadmap is retained, Private Chat is marked `Available`, and Auto Translation, In-app Calls, and Daily Reports & Albums are marked `Coming Soon`. |
-| Homepage lower-section visual rhythm | Confirmed needs another desktop-only visual polish pass. Current issues: excessive vertical empty space between sections, lower sections are visually too small compared with hero/top sections, Communication Roadmap cards need larger dimensions and stronger hierarchy, KidsGarden Store is too compressed, Parent Community Highlights is unbalanced with a large empty news area and small board cards, section heading alignment/style is inconsistent, and lower section container width/card scale need normalization. Hero and upper homepage sections should not be changed in this next pass. |
-| `/kindergartens` | Pending browser screenshot review. |
-| Kindergarten detail | Pending browser screenshot review. |
-| Login/register | Pending browser screenshot review after social login UI changes. |
-| Role dashboards | Pending browser screenshot review for My Page, KAdmin, Parent, Teacher, chats, and Super Admin. |
+| Homepage lower-section visual rhythm at 1280x1000 | Browser screenshots captured at `/tmp/kg-home-lower-pre-1280.png` and `/tmp/kg-home-lower-post-1280.png`. Current completed result: Popular Kindergartens remains one dynamic section with three active database records, Communication Roadmap keeps Private Chat `Available` and the other items `Coming Soon`, KidsGarden Store remains `Coming Soon`, Parent Community Highlights uses a compact empty-news state plus larger board cards, Final CTA and Footer align to the same desktop container, and no horizontal overflow was detected. |
+| `/kindergartens` at 1280x1000 | Browser QA completed for the discovery controls. Screenshots captured at `/tmp/kg-kindergartens-grid-1280.png` and `/tmp/kg-kindergartens-list-1280.png`. Current result: three real kindergarten records render in grid and list modes, grid/list buttons are real buttons with correct `aria-pressed`, preset tabs update active state and query sort values, `View Details` navigates from both grid and list cards, search still submits, pagination renders a disabled next button for the current three-record dataset, map fallback remains visible, and no horizontal overflow was detected. Existing realtime `ws://127.0.0.1:3007/?token=` warning remains separate. |
+| Kindergarten detail at 1280x1000 | Browser QA completed for `/kindergartens/detail?id=6a17819994028bb86d02b496`. Screenshots captured at `/tmp/kg-detail-after-1280.png`, `/tmp/kg-detail-gallery-1280.png`, `/tmp/kg-detail-hero-contact-1280.png`, `/tmp/kg-detail-visit-1280.png`, and `/tmp/kg-detail-sidebar-contact-1280.png`. Current result: real `KidsNest` data loads, the current record has no `kindergartenImages` so `See all photos` is hidden rather than inert, hero `Contact Center`, sidebar `Contact Center`, and `Request a Visit` show the existing login-required flow for unauthenticated users, no horizontal overflow was detected, and no new page errors were reported. Existing Apollo request logging and realtime warnings remain separate. |
+| Login/register at 1280x1000 | Browser QA completed. Screenshots captured at `/tmp/kg-auth-login-post-1280.png`, `/tmp/kg-auth-register-post-1280.png`, and `/tmp/kg-auth-validation-post-1280.png`. Current result: `/account/login` redirects to login mode, `/account/join?mode=register` renders the parent-only registration flow, login/register cards are centered with KidsGarden branding, required fields accept input and expose native validation, Google and Kakao controls remain wired to existing handlers, Telegram is disabled with a local-domain explanation in this local environment, password reset is marked coming soon instead of acting like a dead link, no old property/agent wording is visible, and no horizontal overflow was detected. Existing realtime `ws://127.0.0.1:3007/?token=` warning and Google Identity Services repeated-initialize warning remain separate. |
+| My Page unauthenticated at 1280x1000 | Browser QA completed for the unauthenticated route. Screenshot captured at `/tmp/kg-mypage-unauth-1280.png`. Current result: `/mypage` redirects to the existing login-mode auth page, the route does not crash, and no horizontal overflow was detected. No valid local authenticated session was available, so authenticated My Page visual QA remains pending. |
+| Role dashboards | Pending browser screenshot review with authenticated Parent, Teacher, Kindergarten Admin, and Super Admin accounts. My Page source-level first pass is implemented, but authenticated role views still need real-session QA. |
 
 ## Current Project Rules
 
