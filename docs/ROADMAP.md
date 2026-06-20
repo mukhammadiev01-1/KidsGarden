@@ -1,6 +1,6 @@
 # KidsGarden Roadmap
 
-Last updated: 2026-06-20
+Last updated: 2026-06-21
 
 This roadmap lists remaining work in priority order. It does not claim manual QA unless it has been performed.
 
@@ -14,7 +14,7 @@ This roadmap lists remaining work in priority order. It does not claim manual QA
    - `/kindergartens` desktop discovery controls have been browser-checked at 1280x1000: grid/list toggle works, preset tabs sort by real fields, `Top Rated` is now `Top Rank`, and `New` uses newest-first sorting.
    - Kindergarten detail controls have been browser-checked at 1280x1000: real detail data loads, gallery control is hidden when no gallery images exist, Contact Center uses the existing auth-required parent application/contact flow, and Request a Visit does not create a fake booking.
    - Login/register desktop QA has been browser-checked at 1280x1000: `/account/login` resolves to the login flow, `/account/join?mode=register` keeps public registration parent-only, old auth visuals and dead controls were cleaned up, provider controls are either wired or clearly unavailable, and no horizontal overflow was detected.
-   - My Page first implementation pass is complete at source level, and unauthenticated `/mypage` has been browser-checked at 1280x1000: it redirects to the existing login-mode auth page without crashing or horizontal overflow. Authenticated My Page role views remain pending because no valid local session was available in the QA browser profile.
+   - My Page first implementation pass is complete at source level, and unauthenticated `/mypage` has been browser-checked at 1280x1000: it redirects to the existing login-mode auth page without crashing or horizontal overflow. A stored-JWT hydration guard was added so authenticated users are not redirected before `userVar` loads. Authenticated My Page role views remain pending because no valid local session was available in the QA browser profile.
    - Next visual review should continue with authenticated My Page role views and role dashboards.
 
 2. Review each page individually with browser screenshots.
@@ -55,21 +55,39 @@ This roadmap lists remaining work in priority order. It does not claim manual QA
    - MongoDB remains the source of truth; Redis/realtime is only for live updates.
    - Keep the known realtime warning `ws://127.0.0.1:3007/?token=` tracked separately.
 
-6. Production realtime `wss://` configuration.
+6. KAdmin Kindergarten Creation Approval + Map Address UX.
+   - Priority: after current My Page/KAdmin UI cleanup, before production deployment polish.
+   - Future backend + frontend task only; do not implement as part of current UI cleanup.
+   - Kindergarten location UX should not use latitude/longitude as the primary normal KAdmin input.
+   - Kindergarten create/edit should use address search and map selection, preferably Kakao map/address search.
+   - UI should show a human-readable address, selected map marker, and optional map preview.
+   - Latitude/longitude should be saved internally after the address/map selection is made.
+   - Manual latitude/longitude fields, if still needed, should be hidden under `Advanced options`.
+   - Normal KAdmin flow should be address/map based, not raw coordinate based.
+   - KAdmin-created kindergartens should not become public/ACTIVE immediately.
+   - New centers should first use a pending review/approval status such as `PENDING_REVIEW` or `PENDING_APPROVAL`.
+   - Super Admin should review and approve/reject new centers.
+   - Only approved/ACTIVE kindergartens should become public and appear in public listing.
+   - Investigate whether one KAdmin can create unlimited kindergartens.
+   - Decide whether to enforce one active kindergarten per KAdmin, limited pending requests, or Super Admin approval for every new center.
+   - Backend must enforce anti-abuse and limit rules; UI-only restriction is not enough.
+   - Preserve current role policy: public signup creates Parent/default users, Teacher/KAdmin access requires approval/invite/request, and Super Admin remains internal only.
+
+7. Production realtime `wss://` configuration.
    - Configure production WebSocket origin.
    - Confirm Redis URL/TLS settings.
    - Verify realtime fallback behavior when Redis or WebSocket delivery is unavailable.
 
-7. Deployment.
+8. Deployment.
    - Finalize backend and frontend environment values in the deployment secret managers.
    - Run production builds.
    - Confirm uploads, GraphQL, realtime, social redirects, and Kakao Maps in the deployed environment.
 
-8. Portfolio screenshots/demo.
+9. Portfolio screenshots/demo.
    - Capture clean desktop screenshots after visual QA.
    - Prepare demo flow covering public discovery, applications, dashboards, chat, notifications, maps, and social login.
 
-9. Future feature: About Us page.
+10. Future feature: About Us page.
 
 ## About Us Future Scope
 
