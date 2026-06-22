@@ -1,5 +1,5 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, Length, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { KindergartenLocation, KindergartenStatus, KindergartenType } from '../../enums/kindergarten.enum';
 import type { ObjectId } from 'mongoose';
 import { availableKindergartenSorts } from '../../config';
@@ -171,6 +171,46 @@ export class KindergartensInquiry {
 	@IsNotEmpty()
 	@Field(() => PISearch)
 	search: PISearch;
+}
+
+@InputType()
+export class NearbyKindergartensInput {
+	@IsNotEmpty()
+	@IsNumber()
+	@Min(-90)
+	@Max(90)
+	@Field(() => Number)
+	latitude: number;
+
+	@IsNotEmpty()
+	@IsNumber()
+	@Min(-180)
+	@Max(180)
+	@Field(() => Number)
+	longitude: number;
+
+	@IsOptional()
+	@IsNumber()
+	@Min(1)
+	@Max(30000)
+	@Field(() => Number, { nullable: true })
+	radiusMeters?: number;
+}
+
+@InputType()
+export class NearbyKindergartensByAddressInput {
+	@IsNotEmpty()
+	@IsString()
+	@Length(1, 200)
+	@Field(() => String)
+	address: string;
+
+	@IsOptional()
+	@IsNumber()
+	@Min(1)
+	@Max(30000)
+	@Field(() => Number, { nullable: true })
+	radiusMeters?: number;
 }
 
 @InputType()

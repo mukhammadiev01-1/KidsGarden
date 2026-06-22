@@ -7,6 +7,8 @@ import {
 	OrdinaryInquiry,
 	KindergartensInquiry,
 	KindergartenInput,
+	NearbyKindergartensInput,
+	NearbyKindergartensByAddressInput,
 } from '../../libs/dto/kindergarten/kindergarten.input';
 import { MemberType } from '../../libs/enums/member.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -73,6 +75,26 @@ export class KindergartenResolver {
 	): Promise<Kindergartens> {
 		console.log('Query: getKindergartens');
 		return await this.kindergartenService.getKindergartens(memberId, input);
+	}
+
+	@UseGuards(WithoutGuard)
+	@Query((returns) => Kindergartens)
+	public async getNearbyKindergartens(
+		@Args('input') input: NearbyKindergartensInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Kindergartens> {
+		console.log('Query: getNearbyKindergartens');
+		return await this.kindergartenService.getNearbyKindergartens(memberId, input);
+	}
+
+	@UseGuards(WithoutGuard)
+	@Query((returns) => Kindergartens)
+	public async getNearbyKindergartensByAddress(
+		@Args('input') input: NearbyKindergartensByAddressInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Kindergartens> {
+		console.log('Query: getNearbyKindergartensByAddress');
+		return await this.kindergartenService.getNearbyKindergartensByAddress(memberId, input);
 	}
 
 	@UseGuards(AuthGuard)

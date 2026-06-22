@@ -3,6 +3,7 @@ import type { ObjectId } from 'mongoose';
 import { KindergartenLocation, KindergartenStatus, KindergartenType } from '../../enums/kindergarten.enum';
 import { PublicMember, TotalCounter } from '../member/member';
 import { MeLiked } from '../like/like';
+import type { KindergartenGeoLocation } from '../../utils/kindergarten-geo-location.util';
 
 @ObjectType()
 export class Kindergarten {
@@ -26,6 +27,8 @@ export class Kindergarten {
 
 	@Field(() => Number, { nullable: true })
 	kindergartenLongitude?: number;
+
+	kindergartenGeoLocation?: KindergartenGeoLocation;
 
 	@Field(() => String)
 	kindergartenTitle: string;
@@ -82,6 +85,10 @@ export class Kindergarten {
 	/** from aggregation **/
 	@Field(() => [MeLiked], { nullable: true })
 	meLiked?: MeLiked[];
+
+	/** from nearby aggregation **/
+	@Field(() => Number, { nullable: true })
+	distanceMeters?: number;
 }
 
 @ObjectType()

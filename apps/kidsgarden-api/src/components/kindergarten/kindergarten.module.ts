@@ -9,6 +9,7 @@ import KindergartenSchema from '../../shemas/Kindergarten.model';
 import { LikeModule } from '../like/like.module';
 import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
 import MemberSchema from '../../shemas/Member.model';
+import { NaverMapsService } from './services/naver-maps.service';
 
 @Module({
   imports: [
@@ -31,7 +32,7 @@ import MemberSchema from '../../shemas/Member.model';
     MemberModule, // MemberModule ni import qiladi, bu yerda mulk egasi va boshqa member bilan bog'liq funksiyalar uchun
     LikeModule, // LikeModule ni import qiladi, bu yerda mulkga like qo'shish va like bilan bog'liq funksiyalar uchun
   ],
-  providers: [KindergartenResolver, KindergartenService], // KindergartenResolver va KindergartenService ni provider sifatida ro'yxat qiladi, bu yerda resolver GraphQL so'rovlarini boshqaradi va service esa biznes logikasini amalga oshiradi
+  providers: [KindergartenResolver, KindergartenService, NaverMapsService], // KindergartenResolver va KindergartenService ni provider sifatida ro'yxat qiladi, bu yerda resolver GraphQL so'rovlarini boshqaradi va service esa biznes logikasini amalga oshiradi
   exports: [KindergartenService], // KindergartenService ni export qiladi, bu yerda boshqa modullar uni import qilib ishlatishi mumkin
 })
 export class KindergartenModule {}

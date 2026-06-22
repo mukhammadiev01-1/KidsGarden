@@ -9,6 +9,8 @@ import {
 	OrdinaryInquiry,
 	KindergartensInquiry,
 	KindergartenInput,
+	NearbyKindergartensInput,
+	NearbyKindergartensByAddressInput,
 } from '../../libs/dto/kindergarten/kindergarten.input';
 import { MemberService } from '../member/member.service';
 import { StatisticModifier, T } from '../../libs/types/common';
@@ -30,10 +32,22 @@ import { LikeGroup } from '../../libs/enums/like.enum';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { Member } from '../../libs/dto/member/member';
+import {
+	buildKindergartenGeoLocation,
+	KindergartenGeoLocation,
+} from '../../libs/utils/kindergarten-geo-location.util';
+import { NaverMapsService } from './services/naver-maps.service';
 
 interface MonthlyFeeCompatibleInput {
 	kindergartenPrice?: number;
 	monthlyFee?: number;
+}
+
+interface KindergartenCoordinateCompatibleInput {
+	kindergartenLatitude?: number;
+	kindergartenLongitude?: number;
+	kindergartenAddress?: string;
+	kindergartenGeoLocation?: KindergartenGeoLocation;
 }
 
 interface KindergartenEnumCompatibleInput {
@@ -68,6 +82,10 @@ const kindergartenStatusFilterAliases: Partial<Record<KindergartenStatus, Kinder
 @Injectable()
 export class KindergartenService {
 	private readonly publicKindergartenListMaxLimit = 50;
+	private readonly nearbyKindergartenListMaxLimit = 20;
+	private readonly nearbyDefaultRadiusMeters = 5000;
+	private readonly nearbyMaxRadiusMeters = 30000;
+	private readonly nearbyAddressMaxLength = 200;
 	private readonly ownerKindergartenListMaxLimit = 100;
 	private readonly adminKindergartenListMaxLimit = 100;
 
@@ -79,11 +97,12 @@ export class KindergartenService {
 		private memberService: MemberService,
 		private viewService: ViewService,
 		private likeService: LikeService,
+		private naverMapsService: NaverMapsService,
 	) {}
 
 	public async createKindergarten(input: KindergartenInput): Promise<Kindergarten> {
-		const normalizedInput = this.normalizeKindergartenEnums(
-			this.normalizeMonthlyFeeInput({ ...input }, { requireFee: true }),
+		const normalizedInput = await this.prepareKindergartenLocationInput(
+			this.normalizeKindergartenEnums(this.normalizeMonthlyFeeInput({ ...input }, { requireFee: true })),
 		);
 		const session = await this.connection.startSession();
 
@@ -154,8 +173,8 @@ export class KindergartenService {
 	}
 
 	public async updateKindergarten(memberId: ObjectId, input: KindergartenUpdate): Promise<Kindergarten> {
-		const normalizedInput = this.normalizeKindergartenEnums(
-			this.normalizeMonthlyFeeInput({ ...input }, { requireFee: false }),
+		const normalizedInput = await this.prepareKindergartenLocationInput(
+			this.normalizeKindergartenEnums(this.normalizeMonthlyFeeInput({ ...input }, { requireFee: false })),
 		);
 		const { kindergartenStatus } = normalizedInput;
 		const search: T = {
@@ -219,6 +238,77 @@ export class KindergartenService {
 		return result[0];
 	}
 
+	public async getNearbyKindergartens(memberId: ObjectId, input: NearbyKindergartensInput): Promise<Kindergartens> {
+		const latitude = Number(input.latitude);
+		const longitude = Number(input.longitude);
+		const radiusMeters = this.normalizeNearbyRadius(input.radiusMeters);
+
+		this.validateNearbyCoordinates(latitude, longitude);
+		return await this.getNearbyKindergartensByCoordinates(memberId, latitude, longitude, radiusMeters);
+	}
+
+	public async getNearbyKindergartensByAddress(
+		memberId: ObjectId,
+		input: NearbyKindergartensByAddressInput,
+	): Promise<Kindergartens> {
+		const address = this.normalizeNearbyAddress(input.address);
+		const radiusMeters = this.normalizeNearbyRadius(input.radiusMeters);
+		const geocodedAddress = await this.naverMapsService.geocodeAddress(address);
+
+		if (!geocodedAddress) return { list: [], metaCounter: [] };
+
+		this.validateNearbyCoordinates(geocodedAddress.latitude, geocodedAddress.longitude);
+		return await this.getNearbyKindergartensByCoordinates(
+			memberId,
+			geocodedAddress.latitude,
+			geocodedAddress.longitude,
+			radiusMeters,
+		);
+	}
+
+	private async getNearbyKindergartensByCoordinates(
+		memberId: ObjectId,
+		latitude: number,
+		longitude: number,
+		radiusMeters: number,
+	): Promise<Kindergartens> {
+		const result = await this.kindergartenModel
+			.aggregate([
+				{
+					$geoNear: {
+						near: {
+							type: 'Point',
+							coordinates: [longitude, latitude],
+						},
+						key: 'kindergartenGeoLocation',
+						distanceField: 'distanceMeters',
+						maxDistance: radiusMeters,
+						spherical: true,
+						query: {
+							kindergartenStatus: KindergartenStatus.ACTIVE,
+							kindergartenGeoLocation: { $exists: true, $ne: null },
+							'kindergartenGeoLocation.type': 'Point',
+						},
+					},
+				},
+				{ $sort: { distanceMeters: 1 } },
+				{
+					$facet: {
+						list: [
+							{ $limit: this.nearbyKindergartenListMaxLimit },
+							lookupAuthMemberLiked(memberId),
+							lookupPublicMember,
+							{ $unwind: '$memberData' },
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
 	private shapeMatchQuery(match: T, input: KindergartensInquiry): void {
 		// shapeMatchQuery metodi, bu yerda match obyekti va input qabul qiladi, match obyekti input dan olingan search kriteriyalariga ko'ra shakllantiriladi
 		const {
@@ -246,6 +336,37 @@ export class KindergartenService {
 		if (capacityRange) match.kindergartenCapacity = { $gte: capacityRange.start, $lte: capacityRange.end };
 
 		if (text) match.kindergartenTitle = { $regex: new RegExp(escapeRegex(text), 'i') };
+	}
+
+	private validateNearbyCoordinates(latitude: number, longitude: number): void {
+		if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+	}
+
+	private normalizeNearbyRadius(radiusMeters?: number): number {
+		if (radiusMeters === undefined || radiusMeters === null) return this.nearbyDefaultRadiusMeters;
+
+		const normalizedRadius = Number(radiusMeters);
+		if (!Number.isFinite(normalizedRadius) || normalizedRadius <= 0) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		return Math.min(normalizedRadius, this.nearbyMaxRadiusMeters);
+	}
+
+	private normalizeNearbyAddress(address: string): string {
+		const normalizedAddress = address?.trim();
+
+		if (!normalizedAddress || normalizedAddress.length > this.nearbyAddressMaxLength) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		return normalizedAddress;
 	}
 
 	public async getFavorites(memberId: ObjectId, input: OrdinaryInquiry): Promise<Kindergartens> {
@@ -451,6 +572,27 @@ export class KindergartenService {
 		}
 
 		delete input.monthlyFee;
+		return input;
+	}
+
+	private async prepareKindergartenLocationInput<T extends KindergartenCoordinateCompatibleInput>(input: T): Promise<T> {
+		const directGeoLocation = buildKindergartenGeoLocation(input.kindergartenLatitude, input.kindergartenLongitude);
+		if (directGeoLocation) {
+			input.kindergartenGeoLocation = directGeoLocation;
+			return input;
+		}
+
+		if (!input.kindergartenAddress) return input;
+
+		const geocodedAddress = await this.naverMapsService.geocodeAddress(input.kindergartenAddress);
+		if (!geocodedAddress) return input;
+
+		const geocodedGeoLocation = buildKindergartenGeoLocation(geocodedAddress.latitude, geocodedAddress.longitude);
+		if (!geocodedGeoLocation) return input;
+
+		input.kindergartenLatitude = geocodedAddress.latitude;
+		input.kindergartenLongitude = geocodedAddress.longitude;
+		input.kindergartenGeoLocation = geocodedGeoLocation;
 		return input;
 	}
 

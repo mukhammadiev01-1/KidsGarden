@@ -34,6 +34,16 @@ const KindergartenSchema = new Schema(
 			type: Number,
 		},
 
+		kindergartenGeoLocation: {
+			type: {
+				type: String,
+				enum: ['Point'],
+			},
+			coordinates: {
+				type: [Number],
+			},
+		},
+
 		kindergartenTitle: {
 			type: String,
 			required: true,
@@ -106,5 +116,6 @@ const KindergartenSchema = new Schema(
 );
 
 KindergartenSchema.index({ kindergartenType: 1, kindergartenLocation: 1, kindergartenTitle: 1, kindergartenPrice: 1 }, { unique: true });
+KindergartenSchema.index({ kindergartenGeoLocation: '2dsphere' });
 
 export default KindergartenSchema;
