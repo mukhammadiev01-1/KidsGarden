@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, ObjectId } from 'mongoose';
-import { Kindergartens, Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
+import { KindergartenAddressLocation, Kindergartens, Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import {
 	OwnerKindergartensInquiry,
@@ -258,12 +258,39 @@ export class KindergartenService {
 		if (!geocodedAddress) return { list: [], metaCounter: [] };
 
 		this.validateNearbyCoordinates(geocodedAddress.latitude, geocodedAddress.longitude);
-		return await this.getNearbyKindergartensByCoordinates(
+		const result = await this.getNearbyKindergartensByCoordinates(
 			memberId,
 			geocodedAddress.latitude,
 			geocodedAddress.longitude,
 			radiusMeters,
 		);
+
+		return {
+			...result,
+			searchCenterLatitude: geocodedAddress.latitude,
+			searchCenterLongitude: geocodedAddress.longitude,
+			searchAddress: address,
+			resolvedAddress: geocodedAddress.roadAddress || geocodedAddress.jibunAddress || address,
+		};
+	}
+
+	public async geocodeKindergartenAddress(address: string): Promise<KindergartenAddressLocation> {
+		const normalizedAddress = this.normalizeNearbyAddress(address);
+		const geocodedAddress = await this.naverMapsService.geocodeAddress(normalizedAddress);
+
+		if (!geocodedAddress) {
+			throw new BadRequestException(Message.BAD_REQUEST);
+		}
+
+		this.validateNearbyCoordinates(geocodedAddress.latitude, geocodedAddress.longitude);
+
+		return {
+			address: geocodedAddress.roadAddress || geocodedAddress.jibunAddress || normalizedAddress,
+			roadAddress: geocodedAddress.roadAddress,
+			jibunAddress: geocodedAddress.jibunAddress,
+			latitude: geocodedAddress.latitude,
+			longitude: geocodedAddress.longitude,
+		};
 	}
 
 	private async getNearbyKindergartensByCoordinates(

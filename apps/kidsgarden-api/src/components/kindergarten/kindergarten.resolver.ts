@@ -1,6 +1,6 @@
 import { Args, Mutation, Parent, Query, ResolveField, Resolver } from '@nestjs/graphql';
 import { KindergartenService } from './kindergarten.service';
-import { Kindergartens, Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
+import { KindergartenAddressLocation, Kindergartens, Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import {
 	OwnerKindergartensInquiry,
 	AllKindergartensInquiry,
@@ -95,6 +95,14 @@ export class KindergartenResolver {
 	): Promise<Kindergartens> {
 		console.log('Query: getNearbyKindergartensByAddress');
 		return await this.kindergartenService.getNearbyKindergartensByAddress(memberId, input);
+	}
+
+	@Roles(MemberType.KINDERGARTEN_ADMIN)
+	@UseGuards(RolesGuard)
+	@Query((returns) => KindergartenAddressLocation)
+	public async geocodeKindergartenAddress(@Args('address') address: string): Promise<KindergartenAddressLocation> {
+		console.log('Query: geocodeKindergartenAddress');
+		return await this.kindergartenService.geocodeKindergartenAddress(address);
 	}
 
 	@UseGuards(AuthGuard)

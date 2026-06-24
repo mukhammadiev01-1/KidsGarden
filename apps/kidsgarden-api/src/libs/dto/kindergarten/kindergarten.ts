@@ -98,4 +98,34 @@ export class Kindergartens {
 
 	@Field(() => [TotalCounter], { nullable: true })
 	metaCounter: TotalCounter[];
+
+	@Field(() => Number, { nullable: true })
+	searchCenterLatitude?: number;
+
+	@Field(() => Number, { nullable: true })
+	searchCenterLongitude?: number;
+
+	@Field(() => String, { nullable: true })
+	searchAddress?: string;
+
+	@Field(() => String, { nullable: true })
+	resolvedAddress?: string;
+}
+
+@ObjectType()
+export class KindergartenAddressLocation {
+	@Field(() => String)
+	address: string;
+
+	@Field(() => String, { nullable: true })
+	roadAddress?: string;
+
+	@Field(() => String, { nullable: true })
+	jibunAddress?: string;
+
+	@Field(() => Number)
+	latitude: number;
+
+	@Field(() => Number)
+	longitude: number;
 }

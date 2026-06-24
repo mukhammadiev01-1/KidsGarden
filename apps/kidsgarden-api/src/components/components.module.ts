@@ -18,6 +18,7 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationModule } from './notification/notification.module';
 import { RedisModule } from './redis/redis.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     NotificationModule,
     RedisModule,
     RealtimeModule,
+    AiAssistantModule,
     StaffApplicationModule,
     KindergartenAdminApplicationModule,
     AuthModule,
