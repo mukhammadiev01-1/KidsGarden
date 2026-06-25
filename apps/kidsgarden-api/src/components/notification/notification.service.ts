@@ -4,7 +4,7 @@ import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { capPaginationLimit } from '../../libs/config';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
-import { NotificationAudience } from '../../libs/enums/notification.enum';
+import { NotificationAudience, NotificationType } from '../../libs/enums/notification.enum';
 import { Member } from '../../libs/dto/member/member';
 import { Notification, Notifications } from '../../libs/dto/notification/notification';
 import { NotificationInput, NotificationsInquiry } from '../../libs/dto/notification/notification.input';
@@ -22,6 +22,10 @@ export class NotificationService {
 	private readonly maxTitleLength = 140;
 	private readonly maxMessageLength = 320;
 	private readonly maxMetadataLength = 5000;
+	private readonly hiddenChatNotificationTypes = [
+		NotificationType.APPLICATION_CHAT_MESSAGE_CREATED,
+		NotificationType.PARENT_TEACHER_CHAT_MESSAGE_CREATED,
+	];
 
 	constructor(
 		@InjectModel('Notification') private readonly notificationModel: Model<Notification>,
@@ -52,7 +56,13 @@ export class NotificationService {
 	}
 
 	public async getMyUnreadNotificationCount(authMember: Member): Promise<number> {
-		return await this.notificationModel.countDocuments({ recipientId: authMember._id, isRead: false }).exec();
+		return await this.notificationModel
+			.countDocuments({
+				recipientId: authMember._id,
+				isRead: false,
+				type: { $nin: this.hiddenChatNotificationTypes },
+			})
+			.exec();
 	}
 
 	public async markNotificationRead(authMember: Member, notificationId: ObjectId): Promise<boolean> {
@@ -66,7 +76,14 @@ export class NotificationService {
 
 	public async markAllNotificationsRead(authMember: Member): Promise<boolean> {
 		await this.notificationModel
-			.updateMany({ recipientId: authMember._id, isRead: false }, { $set: { isRead: true } })
+			.updateMany(
+				{
+					recipientId: authMember._id,
+					isRead: false,
+					type: { $nin: this.hiddenChatNotificationTypes },
+				},
+				{ $set: { isRead: true } },
+			)
 			.exec();
 
 		return true;
@@ -167,11 +184,20 @@ export class NotificationService {
 		const { isRead, type, targetType, targetId } = input.search ?? {};
 
 		if (isRead !== undefined) match.isRead = isRead;
-		if (type) match.type = type;
+		this.applyVisibleNotificationTypeFilter(match, type);
 		if (targetType) match.targetType = targetType;
 		if (targetId?.trim()) match.targetId = targetId.trim();
 
 		return match;
+	}
+
+	private applyVisibleNotificationTypeFilter(match: T, type?: NotificationType): void {
+		if (type) {
+			match.type = this.hiddenChatNotificationTypes.includes(type) ? { $in: [] } : type;
+			return;
+		}
+
+		match.type = { $nin: this.hiddenChatNotificationTypes };
 	}
 
 	private memberTypeToAudience(memberType: MemberType): NotificationAudience {

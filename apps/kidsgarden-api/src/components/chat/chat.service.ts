@@ -3,9 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId, PipelineStage } from 'mongoose';
 import { Application } from '../../libs/dto/application/application';
 import { Child } from '../../libs/dto/child/child';
-import { Conversation } from '../../libs/dto/conversation/conversation';
-import { ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
+import { Conversation, MyConversationSummary, MyConversations } from '../../libs/dto/conversation/conversation';
+import { MyConversationsInput, ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
 import { Group } from '../../libs/dto/group/group';
+import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { ChatAttachment, Message as ChatMessage, Messages } from '../../libs/dto/message/message';
 import { ChatAttachmentInput, MessagesInquiry, SendMessageInput } from '../../libs/dto/message/message.input';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
@@ -40,10 +41,18 @@ interface MessagePayload {
 	lastMessage: string;
 }
 
+interface NormalizedMyConversationsInput {
+	page: number;
+	limit: number;
+	conversationType?: ConversationType;
+	search?: string;
+}
+
 @Injectable()
 export class ChatService {
 	private readonly logger = new Logger(ChatService.name);
 	private readonly messagesListMaxLimit = 100;
+	private readonly inboxListMaxLimit = 50;
 	private readonly maxMessageLength = 2000;
 	private readonly messageSortFields = ['createdAt', 'updatedAt'];
 
@@ -52,6 +61,7 @@ export class ChatService {
 		@InjectModel('Child') private readonly childModel: Model<Child>,
 		@InjectModel('Conversation') private readonly conversationModel: Model<Conversation>,
 		@InjectModel('Group') private readonly groupModel: Model<Group>,
+		@InjectModel('Kindergarten') private readonly kindergartenModel: Model<Kindergarten>,
 		@InjectModel('KindergartenStaff') private readonly kindergartenStaffModel: Model<KindergartenStaff>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Message') private readonly messageModel: Model<ChatMessage>,
@@ -248,6 +258,319 @@ export class ChatService {
 		await this.assertCanAccessParentTeacherConversation(authMember, conversation);
 
 		return await this.markConversationReadById(authMember, conversation._id);
+	}
+
+	public async getMyConversations(authMember: Member, input?: MyConversationsInput): Promise<MyConversations> {
+		const normalizedInput = this.normalizeMyConversationsInput(input);
+		const conversations = await this.findAccessibleInboxConversations(authMember, normalizedInput.conversationType);
+		const unreadCounts = await this.getUnreadCountsByConversationIds(
+			authMember,
+			conversations.map((conversation) => conversation._id),
+		);
+
+		let summaries = await this.shapeMyConversationSummaries(authMember, conversations, unreadCounts);
+
+		if (normalizedInput.search) {
+			const search = normalizedInput.search.toLowerCase();
+			summaries = summaries.filter((summary) =>
+				[summary.title, summary.subtitle, summary.participantLabel, summary.lastMessage]
+					.filter(Boolean)
+					.some((value) => value.toLowerCase().includes(search)),
+			);
+		}
+
+		const total = summaries.length;
+		const offset = (normalizedInput.page - 1) * normalizedInput.limit;
+
+		return {
+			list: summaries.slice(offset, offset + normalizedInput.limit),
+			total,
+		};
+	}
+
+	public async getMyUnreadMessageCount(authMember: Member): Promise<number> {
+		const conversations = await this.findAccessibleInboxConversations(authMember);
+		const conversationIds = conversations.map((conversation) => conversation._id);
+		if (!conversationIds.length) return 0;
+
+		return await this.messageModel
+			.countDocuments({
+				conversationId: { $in: conversationIds },
+				senderId: { $ne: authMember._id },
+				readBy: { $ne: authMember._id },
+			})
+			.exec();
+	}
+
+	private normalizeMyConversationsInput(input?: MyConversationsInput): NormalizedMyConversationsInput {
+		const page = Number.isFinite(Number(input?.page)) && Number(input?.page) > 0 ? Number(input?.page) : 1;
+		const limit = capPaginationLimit(Number(input?.limit) || 10, this.inboxListMaxLimit);
+		const conversationType = Object.values(ConversationType).includes(input?.conversationType as ConversationType)
+			? input?.conversationType
+			: undefined;
+		const search = input?.search?.trim();
+
+		return {
+			page,
+			limit,
+			...(conversationType ? { conversationType } : {}),
+			...(search ? { search } : {}),
+		};
+	}
+
+	private async findAccessibleInboxConversations(
+		authMember: Member,
+		conversationType?: ConversationType,
+	): Promise<Conversation[]> {
+		const match = await this.shapeInboxConversationMatch(authMember, conversationType);
+		const conversations = await this.conversationModel
+			.find(match)
+			.sort({ lastMessageAt: -1, updatedAt: -1 })
+			.exec();
+
+		const accessibleConversations: Conversation[] = [];
+		for (const conversation of conversations) {
+			if (await this.canAccessInboxConversation(authMember, conversation)) accessibleConversations.push(conversation);
+		}
+
+		return accessibleConversations;
+	}
+
+	private async shapeInboxConversationMatch(authMember: Member, conversationType?: ConversationType): Promise<T> {
+		const allowedTypes = this.getAllowedInboxConversationTypes(authMember, conversationType);
+		if (!allowedTypes.length) return { _id: { $exists: false } };
+
+		const typeMatch = allowedTypes.length === 1 ? allowedTypes[0] : { $in: allowedTypes };
+
+		switch (authMember.memberType) {
+			case MemberType.PARENT:
+				return {
+					type: typeMatch,
+					parentId: authMember._id,
+				};
+			case MemberType.TEACHER:
+				return {
+					type: ConversationType.PARENT_TEACHER_CHAT,
+					teacherId: authMember._id,
+				};
+			case MemberType.KINDERGARTEN_ADMIN: {
+				const staffRecords = await this.kindergartenStaffModel
+					.find({
+						memberId: authMember._id,
+						staffStatus: StaffStatus.ACTIVE,
+						staffRole: { $in: [StaffRole.OWNER, StaffRole.ADMIN] },
+					})
+					.select('kindergartenId')
+					.exec();
+				const kindergartenIds = this.uniqueObjectIds(staffRecords.map((staff) => staff.kindergartenId));
+
+				return {
+					type: ConversationType.APPLICATION_CHAT,
+					...(kindergartenIds.length ? { kindergartenId: { $in: kindergartenIds } } : { _id: { $exists: false } }),
+				};
+			}
+			case MemberType.SUPER_ADMIN:
+				return { type: ConversationType.APPLICATION_CHAT };
+			default:
+				return { _id: { $exists: false } };
+		}
+	}
+
+	private getAllowedInboxConversationTypes(authMember: Member, conversationType?: ConversationType): ConversationType[] {
+		let allowedTypes: ConversationType[];
+
+		switch (authMember.memberType) {
+			case MemberType.PARENT:
+				allowedTypes = [ConversationType.APPLICATION_CHAT, ConversationType.PARENT_TEACHER_CHAT];
+				break;
+			case MemberType.TEACHER:
+				allowedTypes = [ConversationType.PARENT_TEACHER_CHAT];
+				break;
+			case MemberType.KINDERGARTEN_ADMIN:
+			case MemberType.SUPER_ADMIN:
+				allowedTypes = [ConversationType.APPLICATION_CHAT];
+				break;
+			default:
+				allowedTypes = [];
+		}
+
+		if (!conversationType) return allowedTypes;
+		return allowedTypes.includes(conversationType) ? [conversationType] : [];
+	}
+
+	private async canAccessInboxConversation(authMember: Member, conversation: Conversation): Promise<boolean> {
+		try {
+			if (conversation.type === ConversationType.APPLICATION_CHAT) {
+				await this.assertCanAccessConversation(authMember, conversation);
+				return true;
+			}
+
+			if (conversation.type === ConversationType.PARENT_TEACHER_CHAT) {
+				await this.assertCanAccessParentTeacherConversation(authMember, conversation);
+				return true;
+			}
+
+			return false;
+		} catch {
+			return false;
+		}
+	}
+
+	private async getUnreadCountsByConversationIds(
+		authMember: Member,
+		conversationIds: ObjectId[],
+	): Promise<Map<string, number>> {
+		if (!conversationIds.length) return new Map<string, number>();
+
+		const unreadCounts = await this.messageModel
+			.aggregate([
+				{
+					$match: {
+						conversationId: { $in: conversationIds },
+						senderId: { $ne: authMember._id },
+						readBy: { $ne: authMember._id },
+					},
+				},
+				{
+					$group: {
+						_id: '$conversationId',
+						count: { $sum: 1 },
+					},
+				},
+			])
+			.exec();
+
+		return new Map(unreadCounts.map((item: T) => [item._id.toString(), item.count]));
+	}
+
+	private async shapeMyConversationSummaries(
+		authMember: Member,
+		conversations: Conversation[],
+		unreadCounts: Map<string, number>,
+	): Promise<MyConversationSummary[]> {
+		if (!conversations.length) return [];
+
+		const kindergartenIds = this.getDefinedObjectIds(conversations.map((conversation) => conversation.kindergartenId));
+		const applicationIds = this.getDefinedObjectIds(conversations.map((conversation) => conversation.applicationId));
+		const childIds = this.getDefinedObjectIds(conversations.map((conversation) => conversation.childId));
+		const groupIds = this.getDefinedObjectIds(conversations.map((conversation) => conversation.groupId));
+		const memberIds = this.getDefinedObjectIds([
+			...conversations.map((conversation) => conversation.parentId),
+			...conversations.map((conversation) => conversation.teacherId),
+		]);
+
+		const [kindergartens, applications, children, groups, members] = await Promise.all([
+			this.kindergartenModel
+				.find({ _id: { $in: kindergartenIds } })
+				.select('kindergartenTitle kindergartenImages')
+				.lean()
+				.exec(),
+			this.applicationModel
+				.find({ _id: { $in: applicationIds } })
+				.select('childName childAge')
+				.lean()
+				.exec(),
+			this.childModel
+				.find({ _id: { $in: childIds } })
+				.select('childFullName childImage')
+				.lean()
+				.exec(),
+			this.groupModel
+				.find({ _id: { $in: groupIds } })
+				.select('groupName')
+				.lean()
+				.exec(),
+			this.memberModel
+				.find({ _id: { $in: memberIds } })
+				.select('memberNick memberFullName memberImage memberEmail memberPhone')
+				.lean()
+				.exec(),
+		]);
+
+		const kindergartenMap = this.buildDocumentMap(kindergartens);
+		const applicationMap = this.buildDocumentMap(applications);
+		const childMap = this.buildDocumentMap(children);
+		const groupMap = this.buildDocumentMap(groups);
+		const memberMap = this.buildDocumentMap(members);
+
+		return conversations.map((conversation) =>
+			this.shapeMyConversationSummary(authMember, conversation, unreadCounts, {
+				kindergartens: kindergartenMap,
+				applications: applicationMap,
+				children: childMap,
+				groups: groupMap,
+				members: memberMap,
+			}),
+		);
+	}
+
+	private shapeMyConversationSummary(
+		authMember: Member,
+		conversation: Conversation,
+		unreadCounts: Map<string, number>,
+		maps: {
+			kindergartens: Map<string, T>;
+			applications: Map<string, T>;
+			children: Map<string, T>;
+			groups: Map<string, T>;
+			members: Map<string, T>;
+		},
+	): MyConversationSummary {
+		const conversationId = conversation._id.toString();
+		const kindergarten = maps.kindergartens.get(conversation.kindergartenId?.toString());
+		const application = conversation.applicationId
+			? maps.applications.get(conversation.applicationId.toString())
+			: undefined;
+		const child = conversation.childId ? maps.children.get(conversation.childId.toString()) : undefined;
+		const group = conversation.groupId ? maps.groups.get(conversation.groupId.toString()) : undefined;
+		const parent = conversation.parentId ? maps.members.get(conversation.parentId.toString()) : undefined;
+		const teacher = conversation.teacherId ? maps.members.get(conversation.teacherId.toString()) : undefined;
+
+		if (conversation.type === ConversationType.APPLICATION_CHAT) {
+			const parentName = this.getMemberDisplayName(parent);
+			const kindergartenTitle = kindergarten?.kindergartenTitle || 'Kindergarten';
+			const isParent = authMember.memberType === MemberType.PARENT;
+			const title = isParent ? kindergartenTitle : parentName || application?.childName || 'Parent application';
+			const participantLabel = isParent ? 'Center team' : kindergartenTitle;
+
+			return {
+				conversationId,
+				conversationType: conversation.type,
+				title,
+				subtitle: 'Application chat',
+				avatar: isParent ? kindergarten?.kindergartenImages?.[0] : parent?.memberImage,
+				kindergartenId: conversation.kindergartenId?.toString(),
+				parentId: conversation.parentId?.toString(),
+				applicationId: conversation.applicationId?.toString(),
+				lastMessage: conversation.lastMessage,
+				lastMessageAt: conversation.lastMessageAt ?? conversation.updatedAt,
+				unreadCount: unreadCounts.get(conversationId) ?? 0,
+				targetRoute: authMember.memberType === MemberType.SUPER_ADMIN ? '/_admin/applications' : '/mypage?category=applications',
+				participantLabel,
+			};
+		}
+
+		const isTeacher = authMember.memberType === MemberType.TEACHER;
+		const parentName = this.getMemberDisplayName(parent);
+		const teacherName = this.getMemberDisplayName(teacher);
+		const childName = child?.childFullName || 'Child';
+
+		return {
+			conversationId,
+			conversationType: conversation.type,
+			title: isTeacher ? parentName || childName : teacherName || 'Teacher',
+			subtitle: group?.groupName ? `Parent-teacher chat · ${group.groupName}` : 'Parent-teacher chat',
+			avatar: isTeacher ? parent?.memberImage || child?.childImage : teacher?.memberImage,
+			kindergartenId: conversation.kindergartenId?.toString(),
+			childId: conversation.childId?.toString(),
+			teacherId: conversation.teacherId?.toString(),
+			parentId: conversation.parentId?.toString(),
+			lastMessage: conversation.lastMessage,
+			lastMessageAt: conversation.lastMessageAt ?? conversation.updatedAt,
+			unreadCount: unreadCounts.get(conversationId) ?? 0,
+			targetRoute: isTeacher ? '/mypage?category=teacherAttendance' : '/mypage?category=parentChildren',
+			participantLabel: childName,
+		};
 	}
 
 	private validateMessagePayload(input: SendMessageInput): MessagePayload {
@@ -632,6 +955,19 @@ export class ChatService {
 				teacherId: conversation.teacherId?.toString(),
 			},
 		};
+	}
+
+	private getDefinedObjectIds(ids: Array<ObjectId | undefined | null>): ObjectId[] {
+		return this.uniqueObjectIds(ids.filter((id): id is ObjectId => Boolean(id)));
+	}
+
+	private buildDocumentMap(docs: T[]): Map<string, T> {
+		return new Map(docs.map((doc) => [doc._id.toString(), doc]));
+	}
+
+	private getMemberDisplayName(member?: T): string {
+		if (!member) return '';
+		return member.memberFullName || member.memberNick || member.memberEmail || member.memberPhone || '';
 	}
 
 	private uniqueObjectIds(ids: ObjectId[]): ObjectId[] {

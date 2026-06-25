@@ -1,8 +1,8 @@
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ChatService } from './chat.service';
-import { Conversation } from '../../libs/dto/conversation/conversation';
-import { ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
+import { Conversation, MyConversations } from '../../libs/dto/conversation/conversation';
+import { MyConversationsInput, ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
 import { Message, Messages } from '../../libs/dto/message/message';
 import { MessagesInquiry, SendMessageInput } from '../../libs/dto/message/message.input';
 import { Member } from '../../libs/dto/member/member';
@@ -15,6 +15,25 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 @Resolver()
 export class ChatResolver {
 	constructor(private readonly chatService: ChatService) {}
+
+	@Roles(MemberType.PARENT, MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => MyConversations)
+	public async getMyConversations(
+		@AuthMember() authMember: Member,
+		@Args('input', { nullable: true }) input?: MyConversationsInput,
+	): Promise<MyConversations> {
+		console.log('Query: getMyConversations');
+		return await this.chatService.getMyConversations(authMember, input);
+	}
+
+	@Roles(MemberType.PARENT, MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Int)
+	public async getMyUnreadMessageCount(@AuthMember() authMember: Member): Promise<number> {
+		console.log('Query: getMyUnreadMessageCount');
+		return await this.chatService.getMyUnreadMessageCount(authMember);
+	}
 
 	@Roles(MemberType.PARENT, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
 	@UseGuards(RolesGuard)
