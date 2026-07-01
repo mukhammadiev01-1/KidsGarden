@@ -7,8 +7,13 @@ import { Conversation, MyConversationSummary, MyConversations } from '../../libs
 import { MyConversationsInput, ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
 import { Group } from '../../libs/dto/group/group';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
-import { ChatAttachment, Message as ChatMessage, Messages } from '../../libs/dto/message/message';
-import { ChatAttachmentInput, MessagesInquiry, SendMessageInput } from '../../libs/dto/message/message.input';
+import { ChatAttachment, Message as ChatMessage, Messages, TranslatedMessage } from '../../libs/dto/message/message';
+import {
+	ChatAttachmentInput,
+	MessagesInquiry,
+	SendMessageInput,
+	TranslateChatMessageInput,
+} from '../../libs/dto/message/message.input';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
 import { ChildStatus } from '../../libs/enums/child.enum';
@@ -24,6 +29,7 @@ import { NotificationInput } from '../../libs/dto/notification/notification.inpu
 import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../redis/redis.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ChatTranslationService } from './chat-translation.service';
 
 const APPLICATION_CHAT_MESSAGE_CREATED_EVENT = 'application_chat.message.created';
 const PARENT_TEACHER_CHAT_MESSAGE_CREATED_EVENT = 'parent_teacher_chat.message.created';
@@ -67,6 +73,7 @@ export class ChatService {
 		@InjectModel('Message') private readonly messageModel: Model<ChatMessage>,
 		private readonly notificationService: NotificationService,
 		private readonly redisService: RedisService,
+		private readonly chatTranslationService: ChatTranslationService,
 	) {}
 
 	public async getOrCreateApplicationConversation(authMember: Member, applicationId: ObjectId): Promise<Conversation> {
@@ -258,6 +265,44 @@ export class ChatService {
 		await this.assertCanAccessParentTeacherConversation(authMember, conversation);
 
 		return await this.markConversationReadById(authMember, conversation._id);
+	}
+
+	public async translateChatMessage(
+		authMember: Member,
+		input: TranslateChatMessageInput,
+	): Promise<TranslatedMessage> {
+		const message = await this.messageModel.findById(input.messageId).exec();
+		if (!message) throw new InternalServerErrorException(SystemMessage.NO_DATA_FOUND);
+
+		const conversation = await this.findConversationOrFail(message.conversationId, input.conversationType);
+		if (input.conversationType === ConversationType.APPLICATION_CHAT) {
+			await this.assertCanAccessConversation(authMember, conversation);
+		} else if (input.conversationType === ConversationType.PARENT_TEACHER_CHAT) {
+			await this.assertCanAccessParentTeacherConversation(authMember, conversation);
+		} else {
+			throw new BadRequestException(SystemMessage.BAD_REQUEST);
+		}
+
+		const text = message.text?.trim();
+		if (!text) throw new BadRequestException('Only text messages can be translated.');
+		if (text.length > this.chatTranslationService.getMaxChars()) {
+			throw new BadRequestException(
+				`Message is too long to translate. Please keep it under ${this.chatTranslationService.getMaxChars()} characters.`,
+			);
+		}
+
+		const targetLang = String(input.targetLang ?? '').trim().toLowerCase();
+		const translatedText = await this.chatTranslationService.translateMessage({
+			memberId: authMember._id.toString(),
+			text,
+			targetLang,
+		});
+
+		return {
+			messageId: message._id.toString(),
+			targetLang,
+			translatedText,
+		};
 	}
 
 	public async getMyConversations(authMember: Member, input?: MyConversationsInput): Promise<MyConversations> {

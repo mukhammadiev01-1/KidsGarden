@@ -5,6 +5,7 @@ import { NotificationModule } from '../notification/notification.module';
 import { RedisModule } from '../redis/redis.module';
 import { ChatResolver } from './chat.resolver';
 import { ChatService } from './chat.service';
+import { ChatTranslationService } from './chat-translation.service';
 import ApplicationSchema from '../../shemas/Application.model';
 import ChildSchema from '../../shemas/Child.model';
 import ConversationSchema from '../../shemas/Conversation.model';
@@ -28,7 +29,7 @@ import MessageSchema from '../../shemas/Message.model';
 		NotificationModule,
 		RedisModule,
 	],
-	providers: [ChatResolver, ChatService],
+	providers: [ChatResolver, ChatService, ChatTranslationService],
 	exports: [ChatService],
 })
 export class ChatModule {}

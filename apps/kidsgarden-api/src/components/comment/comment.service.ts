@@ -51,6 +51,10 @@ export class CommentService {
       void this.reserveKindergartenCommentCreatedHooks(result).catch((err) => {
         console.log('Kindergarten comment notification hook failed:', err.message);
       });
+    } else if (result.commentGroup === CommentGroup.ARTICLE) {
+      void this.reserveArticleCommentCreatedHooks(result).catch((err) => {
+        console.log('Article comment notification hook failed:', err.message);
+      });
     }
     return result;
   }
@@ -308,6 +312,44 @@ private async reserveKindergartenCommentCreatedHooks(comment: Comment): Promise<
       },
     })),
   );
+}
+
+private async reserveArticleCommentCreatedHooks(comment: Comment): Promise<void> {
+  const article = await this.boardArticleService.getBoardArticle(null, comment.commentRefId);
+  if (!article?.memberId || article.memberId.toString() === comment.memberId.toString()) return;
+
+  await this.createNotificationsBestEffort([
+    {
+      recipientId: article.memberId,
+      senderId: comment.memberId,
+      type: NotificationType.BOARD_ARTICLE_COMMENT_CREATED,
+      title: 'New comment on your article',
+      message: this.shapeArticleCommentNotificationMessage(article.articleTitle, comment.commentContent),
+      targetType: NotificationTargetType.BOARD_ARTICLE,
+      targetId: article._id,
+      metadata: {
+        articleId: article._id.toString(),
+        articleCategory: article.articleCategory,
+        commentId: comment._id.toString(),
+      },
+    },
+  ]);
+}
+
+private shapeArticleCommentNotificationMessage(articleTitle?: string, commentContent?: string): string {
+  const title = this.trimNotificationText(articleTitle, 80);
+  const preview = this.trimNotificationText(commentContent, 90);
+
+  if (title && preview) return `${title}: ${preview}`;
+  if (title) return `A new comment was added to ${title}.`;
+  if (preview) return preview;
+  return 'A new comment was added to your article.';
+}
+
+private trimNotificationText(value?: string, maxLength = 120): string {
+  const normalized = value?.replace(/\s+/g, ' ').trim() ?? '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3).trim()}...`;
 }
 
 }

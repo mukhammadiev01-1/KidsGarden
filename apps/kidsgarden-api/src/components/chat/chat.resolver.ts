@@ -3,8 +3,8 @@ import { UseGuards } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { Conversation, MyConversations } from '../../libs/dto/conversation/conversation';
 import { MyConversationsInput, ParentTeacherConversationInput } from '../../libs/dto/conversation/conversation.input';
-import { Message, Messages } from '../../libs/dto/message/message';
-import { MessagesInquiry, SendMessageInput } from '../../libs/dto/message/message.input';
+import { Message, Messages, TranslatedMessage } from '../../libs/dto/message/message';
+import { MessagesInquiry, SendMessageInput, TranslateChatMessageInput } from '../../libs/dto/message/message.input';
 import { Member } from '../../libs/dto/member/member';
 import { MemberType } from '../../libs/enums/member.enum';
 import { shapeIntoMongoObjectId } from '../../libs/config';
@@ -154,5 +154,17 @@ export class ChatResolver {
 		console.log('Mutation: markParentTeacherConversationRead');
 		const conversationId = shapeIntoMongoObjectId(input);
 		return await this.chatService.markParentTeacherConversationRead(authMember, conversationId);
+	}
+
+	@Roles(MemberType.PARENT, MemberType.TEACHER, MemberType.KINDERGARTEN_ADMIN, MemberType.SUPER_ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => TranslatedMessage)
+	public async translateChatMessage(
+		@Args('input') input: TranslateChatMessageInput,
+		@AuthMember() authMember: Member,
+	): Promise<TranslatedMessage> {
+		console.log('Mutation: translateChatMessage');
+		input.messageId = shapeIntoMongoObjectId(input.messageId);
+		return await this.chatService.translateChatMessage(authMember, input);
 	}
 }

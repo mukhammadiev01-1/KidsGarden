@@ -20,6 +20,9 @@ import { LikeInput } from '../../libs/dto/like/like.input';
 import { LikeGroup } from '../../libs/enums/like.enum';
 import { Member } from '../../libs/dto/member/member';
 import { MemberType } from '../../libs/enums/member.enum';
+import { NotificationTargetType, NotificationType } from '../../libs/enums/notification.enum';
+import { NotificationInput } from '../../libs/dto/notification/notification.input';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class BoardArticleService {
@@ -31,6 +34,7 @@ export class BoardArticleService {
 		private readonly memberService: MemberService,
 		private readonly viewService: ViewService,
 		private readonly likeService: LikeService,
+		private readonly notificationService: NotificationService,
 	) {}
 
 	public async createBoardArticle(authMember: Member, input: BoardArticleInput): Promise<BoardArticle> {
@@ -171,6 +175,11 @@ export class BoardArticleService {
 		});
 
 		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		if (modifier > 0) {
+			void this.reserveBoardArticleLikedHook(target, memberId).catch((err) => {
+				console.log('Board article like notification hook failed:', err.message);
+			});
+		}
 		return result;
 	}
 
@@ -300,5 +309,42 @@ export class BoardArticleService {
 
 	private escapeRegex(value: string): string {
 		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+
+	private async reserveBoardArticleLikedHook(article: BoardArticle, senderId: ObjectId): Promise<void> {
+		if (!article?.memberId || article.memberId.toString() === senderId.toString()) return;
+
+		await this.createNotificationBestEffort({
+			recipientId: article.memberId,
+			senderId,
+			type: NotificationType.BOARD_ARTICLE_LIKED,
+			title: 'Someone liked your article',
+			message: this.shapeArticleNotificationMessage('Your article was liked', article.articleTitle),
+			targetType: NotificationTargetType.BOARD_ARTICLE,
+			targetId: article._id,
+			metadata: {
+				articleId: article._id.toString(),
+				articleCategory: article.articleCategory,
+			},
+		});
+	}
+
+	private async createNotificationBestEffort(input: NotificationInput): Promise<void> {
+		try {
+			await this.notificationService.createNotification(input);
+		} catch (err) {
+			console.log('Board article notification failed:', err.message);
+		}
+	}
+
+	private shapeArticleNotificationMessage(prefix: string, articleTitle?: string): string {
+		const title = this.trimNotificationText(articleTitle, 90);
+		return title ? `${prefix}: ${title}` : prefix;
+	}
+
+	private trimNotificationText(value?: string, maxLength = 120): string {
+		const normalized = value?.replace(/\s+/g, ' ').trim() ?? '';
+		if (normalized.length <= maxLength) return normalized;
+		return `${normalized.slice(0, maxLength - 3).trim()}...`;
 	}
 }

@@ -1,6 +1,7 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsNotEmpty, IsOptional, Min } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, Min } from 'class-validator';
 import type { ObjectId } from 'mongoose';
+import { ConversationType } from '../../enums/chat.enum';
 import { Direction } from '../../enums/common.enum';
 
 @InputType()
@@ -68,4 +69,20 @@ export class SendMessageInput {
 	@IsOptional()
 	@Field(() => [ChatAttachmentInput], { nullable: true })
 	attachments?: ChatAttachmentInput[];
+}
+
+@InputType()
+export class TranslateChatMessageInput {
+	@IsNotEmpty()
+	@Field(() => ConversationType)
+	conversationType: ConversationType;
+
+	@IsNotEmpty()
+	@Field(() => String)
+	messageId: ObjectId;
+
+	@IsNotEmpty()
+	@IsIn(['en', 'ko', 'ru', 'uz'])
+	@Field(() => String)
+	targetLang: string;
 }

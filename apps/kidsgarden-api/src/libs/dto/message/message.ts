@@ -52,3 +52,15 @@ export class Messages {
 	@Field(() => [TotalCounter], { nullable: true })
 	metaCounter: TotalCounter[];
 }
+
+@ObjectType()
+export class TranslatedMessage {
+	@Field(() => String)
+	messageId: string;
+
+	@Field(() => String)
+	targetLang: string;
+
+	@Field(() => String)
+	translatedText: string;
+}
