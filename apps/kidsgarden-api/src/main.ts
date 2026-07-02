@@ -19,12 +19,50 @@ function getPort(envValue: string | undefined, fallbackPort: number): number {
 	return port;
 }
 
+function parseOriginList(value: string | undefined): string[] {
+	return (value || '')
+		.split(',')
+		.map((origin) => origin.trim())
+		.filter(Boolean);
+}
+
+function getAllowedCorsOrigins(): string[] {
+	const configuredOrigins = parseOriginList(process.env.CORS_ORIGIN);
+
+	if (process.env.NODE_ENV === 'production') {
+		if (configuredOrigins.length === 0) {
+			throw new Error('CORS_ORIGIN must be configured in production.');
+		}
+
+		return configuredOrigins;
+	}
+
+	return [
+		'http://127.0.0.1:7007',
+		'http://localhost:7007',
+		'http://127.0.0.1:3000',
+		'http://localhost:3000',
+		...configuredOrigins,
+	];
+}
+
 async function bootstrap() {
 	// NestJS ilovasini yaratish uchun bootstrap funksiyasi
 	const app = await NestFactory.create(AppModule); // NestJS ilovasini yaratadi va AppModule ni asosiy modul sifatida ishlatadi
 	app.useGlobalPipes(new ValidationPipe()); //
 	app.useGlobalInterceptors(new LoggingInterceptor()); // global interceptor ni qo'llaydi, bu yerda LoggingInterceptor har bir request va response ni log qiladi
-	app.enableCors({ origin: true, credentials: true }); // CORS ni yoqadi, bu frontend va backend o'rtasida cross-origin so'rovlarni ruxsat beradi
+	const allowedCorsOrigins = getAllowedCorsOrigins();
+	app.enableCors({
+		origin: (origin, callback) => {
+			if (!origin || allowedCorsOrigins.includes(origin)) {
+				callback(null, true);
+				return;
+			}
+
+			callback(new Error('Not allowed by CORS'));
+		},
+		credentials: true,
+	}); // CORS ni faqat ruxsat berilgan frontend originlari uchun yoqadi
 
 	app.use(graphqlUploadExpress({ maxFileSize: 15000000, maxFiles: 10 })); // GraphQL orqali file upload ni qo'llab-quvvatlaydi, maxFileSize va maxFiles ni belgilaydi
 	app.use('/uploads', express.static(join(process.cwd(), 'uploads')));

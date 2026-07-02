@@ -10,12 +10,17 @@ import { DatabaseModule } from './database/database.module'; // database ulanish
 import { T } from './libs/types/common';
 import { SocketModule } from './socket/socket.module';
 
+const isProduction = process.env.NODE_ENV === 'production';
+const enableGraphqlPlayground = !isProduction && process.env.GRAPHQL_PLAYGROUND !== 'false';
+const enableGraphqlIntrospection = !isProduction || process.env.GRAPHQL_INTROSPECTION === 'true';
+
 @Module({
   imports: [ // loyihada ishlatiladigan modullar ro'yxati
     ConfigModule.forRoot(), // env fayllarni global tarzda yuklaydi
     GraphQLModule.forRoot({ // GraphQL uchun asosiy konfiguratsiya
       driver: ApolloDriver, // Apollo driver orqali GraphQL ishlaydi
-      playground: true, // brauzerda GraphQL playground ni yoqadi
+      playground: enableGraphqlPlayground, // production muhitida GraphQL playground o'chiriladi
+      introspection: enableGraphqlIntrospection, // production muhitida introspection faqat env orqali yoqiladi
       uploads: false, // GraphQL orqali file upload ni o'chiradi
       autoSchemaFile: true, // schema faylni avtomatik yaratadi
       formatError: (error: T) => { // GraphQL xatolik formatini belgilaydi, bu yerda error ni konsolga chiqaradi va kerakli formatda qaytaradi
