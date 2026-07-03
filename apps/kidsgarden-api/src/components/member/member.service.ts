@@ -19,7 +19,7 @@ import {
 	TelegramLoginInput,
 } from '../../libs/dto/member/member.input'; // signup va login input dto larni import qiladi
 import { Direction, Message } from '../../libs/enums/common.enum'; // umumiy message enum larni import qiladi
-import { MemberStatus, MemberType } from '../../libs/enums/member.enum'; // member status enum larni import qiladi
+import { MemberAuthType, MemberStatus, MemberType } from '../../libs/enums/member.enum'; // member status enum larni import qiladi
 import { PreviewMemberPurpose } from '../../libs/enums/member-preview.enum';
 import { StaffRole, StaffStatus } from '../../libs/enums/kindergarten-staff.enum';
 import { AuthService } from '../auth/auth.service';
@@ -43,6 +43,8 @@ import { SocialAuthService } from '../auth/social/social-auth.service';
 export class MemberService {
 	private readonly kindergartenAdminsListMaxLimit = 50;
 	private readonly adminMemberListMaxLimit = 100;
+	private readonly nicknamePattern = /^[\p{L}\p{N}_-]{3,20}$/u;
+	private readonly canonicalPhonePattern = /^\+[1-9]\d{7,14}$/;
 
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
@@ -59,7 +61,11 @@ export class MemberService {
 			throw new BadRequestException('Public signup allows only PARENT role');
 		}
 
+		input.memberNick = this.normalizeMemberNick(input.memberNick);
+		input.memberPhone = this.normalizeMemberPhone(input.memberPhone);
+		this.assertValidSignupPassword(input.memberPassword);
 		input.memberType = MemberType.PARENT;
+		input.memberAuthType = MemberAuthType.PHONE;
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 
 		try {
@@ -68,12 +74,13 @@ export class MemberService {
 			return result;
 		} catch (err) {
 			console.log('Error, Service.model:', err.message);
-			throw new BadRequestException(Message.USED_MEMBER_NICK_OR_PHONE);
+			throw this.toSignupCreateException(err);
 		}
 	}
 
 	public async login(input: LoginInput): Promise<Member> {
-		const { memberNick, memberPassword } = input;
+		const memberNick = this.normalizeMemberNick(input.memberNick);
+		const { memberPassword } = input;
 		const response: Member = await this.memberModel
 			.findOne({ memberNick: memberNick })
 			.select('+memberPassword')
@@ -92,6 +99,59 @@ export class MemberService {
 		response.accessToken = await this.authService.createToken(response);
 
 		return response;
+	}
+
+	private normalizeMemberNick(memberNick: string): string {
+		const normalizedNick = typeof memberNick === 'string' ? memberNick.trim() : '';
+		if (!this.nicknamePattern.test(normalizedNick)) {
+			throw new BadRequestException(Message.INVALID_MEMBER_NICK);
+		}
+
+		return normalizedNick;
+	}
+
+	private assertValidSignupPassword(memberPassword: string): void {
+		const isValidPassword =
+			typeof memberPassword === 'string' &&
+			memberPassword.length >= 8 &&
+			memberPassword.length <= 72 &&
+			memberPassword.trim().length > 0;
+
+		if (!isValidPassword) throw new BadRequestException(Message.INVALID_MEMBER_PASSWORD);
+	}
+
+	private normalizeMemberPhone(memberPhone: string): string {
+		const source = typeof memberPhone === 'string' ? memberPhone.trim() : '';
+		let normalizedPhone = source.startsWith('+')
+			? `+${source.slice(1).replace(/\D/g, '')}`
+			: source.replace(/[\s\-()]/g, '');
+
+		if (!normalizedPhone.startsWith('+')) {
+			if (normalizedPhone.startsWith('010')) normalizedPhone = `+82${normalizedPhone.slice(1)}`;
+			else if (normalizedPhone.startsWith('998')) normalizedPhone = `+${normalizedPhone}`;
+			else if (normalizedPhone.startsWith('82')) normalizedPhone = `+${normalizedPhone}`;
+		}
+
+		if (!this.canonicalPhonePattern.test(normalizedPhone)) {
+			throw new BadRequestException(Message.INVALID_MEMBER_PHONE);
+		}
+
+		return normalizedPhone;
+	}
+
+	private toSignupCreateException(err: any): BadRequestException {
+		if (err?.code === 11000) {
+			const duplicateFields = new Set<string>([
+				...Object.keys(err.keyPattern ?? {}),
+				...Object.keys(err.keyValue ?? {}),
+			]);
+
+			if (duplicateFields.has('memberNick')) return new BadRequestException(Message.USED_MEMBER_NICK);
+			if (duplicateFields.has('memberPhone')) return new BadRequestException(Message.USED_MEMBER_PHONE);
+			if (duplicateFields.has('memberEmail')) return new BadRequestException(Message.USED_MEMBER_EMAIL);
+		}
+
+		return new BadRequestException(Message.CREATE_ACCOUNT_FAILED);
 	}
 
 	public async googleLogin(input: GoogleLoginInput): Promise<Member> {

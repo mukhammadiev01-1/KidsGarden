@@ -1,23 +1,26 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsIn, IsNotEmpty, IsOptional, Length, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsIn, IsNotEmpty, IsOptional, Length, Matches, Min } from 'class-validator';
 import { KakaoAuthIntent, MemberAuthType, MemberStatus, MemberType, TelegramAuthIntent } from '../../enums/member.enum';
 import { availableKindergartenAdminSorts, availableMemberSorts } from '../../config';
-import { Direction } from '../../enums/common.enum';
+import { Direction, Message } from '../../enums/common.enum';
 import { PreviewMemberPurpose } from '../../enums/member-preview.enum';
 import { StaffRole } from '../../enums/kindergarten-staff.enum';
 
 @InputType()
 export class MemberInput {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
-  @Length(3, 12)
+  @Matches(/^[\p{L}\p{N}_-]{3,20}$/u, { message: Message.INVALID_MEMBER_NICK })
   @Field(() => String)
   memberNick: string;
 
   @IsNotEmpty()
-  @Length(5, 12)
+  @Length(8, 72, { message: Message.INVALID_MEMBER_PASSWORD })
   @Field(() => String)
   memberPassword: string;
 
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
   @Field(() => String)
   memberPhone: string;
@@ -33,13 +36,14 @@ export class MemberInput {
 
 @InputType()
 export class LoginInput {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
-  @Length(3, 12)
+  @Matches(/^[\p{L}\p{N}_-]{3,20}$/u, { message: Message.INVALID_MEMBER_NICK })
   @Field(() => String)
   memberNick: string;
 
   @IsNotEmpty()
-  @Length(5, 12)
+  @Length(1, 72)
   @Field(() => String)
   memberPassword: string;
 }

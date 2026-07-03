@@ -10,6 +10,13 @@ export enum Message {
   BAD_REQUEST = 'Bad Request!',
 
   USED_MEMBER_NICK_OR_PHONE = 'Already used member nick or phone!',
+  USED_MEMBER_NICK = 'This nickname is already used.',
+  USED_MEMBER_PHONE = 'This phone number is already registered.',
+  USED_MEMBER_EMAIL = 'This email is already registered.',
+  INVALID_MEMBER_NICK = 'Use 3–20 letters, numbers, hyphen, or underscore.',
+  INVALID_MEMBER_PASSWORD = 'Use at least 8 characters.',
+  INVALID_MEMBER_PHONE = 'Enter a valid phone number, including country code.',
+  CREATE_ACCOUNT_FAILED = 'Could not create account. Please try again.',
   NO_MEMBER_NICK = 'No member with that member nick!',
   BLOCKED_USER = 'You have been blocked!',
   WRONG_PASSWORD = 'Wrong password, try again!',
