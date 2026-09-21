@@ -30,6 +30,7 @@ import { ViewGroup } from '../../libs/enums/view.enum';
 import { LikeService } from '../like/like.service';
 import { Follower, Following, MeFollowed } from '../../libs/dto/follow/follow';
 import {
+	MEMBER_NICK_PATTERN,
 	capPaginationLimit,
 	escapeRegex,
 	memberPreviewProjection,
@@ -43,7 +44,7 @@ import { SocialAuthService } from '../auth/social/social-auth.service';
 export class MemberService {
 	private readonly kindergartenAdminsListMaxLimit = 50;
 	private readonly adminMemberListMaxLimit = 100;
-	private readonly nicknamePattern = /^[\p{L}\p{N}_-]{3,20}$/u;
+	private readonly nicknamePattern = MEMBER_NICK_PATTERN;
 	private readonly canonicalPhonePattern = /^\+[1-9]\d{7,14}$/;
 
 	constructor(

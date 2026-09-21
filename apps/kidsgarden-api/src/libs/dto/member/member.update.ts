@@ -1,7 +1,10 @@
 import { Field, InputType } from '@nestjs/graphql';
-import { IsNotEmpty, IsOptional, Length } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsNotEmpty, IsOptional, Length, Matches } from 'class-validator';
 import { MemberStatus, MemberType } from '../../enums/member.enum';
 import type { ObjectId } from 'mongoose';
+import { MEMBER_NICK_PATTERN } from '../../config';
+import { Message } from '../../enums/common.enum';
 
 @InputType()
 export class MemberUpdate {
@@ -22,7 +25,8 @@ export class MemberUpdate {
   memberPhone?: string;
 
   @IsOptional()
-  @Length(3, 12)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Matches(MEMBER_NICK_PATTERN, { message: Message.INVALID_MEMBER_NICK })
   @Field(() => String, { nullable: true })
   memberNick?: string;
 

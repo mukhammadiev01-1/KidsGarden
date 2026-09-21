@@ -1,6 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 import { ObjectId } from 'bson';
 
+/**
+ * The one nickname rule, shared by signup, login, profile update and the service.
+ *
+ * It used to be copied into each of those. The profile-update copy drifted to a bare
+ * @Length(3, 12) with no character check, which produced two bugs: nicknames of
+ * 13-20 chars (valid at signup) could never be saved again, and a user could rename
+ * themselves to something like "my name" that login's regex rejects -- permanently
+ * locking themselves out. No `g` flag: a shared global regex keeps lastIndex state.
+ */
+export const MEMBER_NICK_PATTERN = /^[\p{L}\p{N}_-]{3,20}$/u;
+
 export const availableKindergartenAdminSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews', 'memberRank'];
 export const availableMemberSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews'];
 

@@ -2,7 +2,7 @@ import { Field, InputType, Int } from '@nestjs/graphql';
 import { Transform } from 'class-transformer';
 import { IsIn, IsNotEmpty, IsOptional, Length, Matches, Min } from 'class-validator';
 import { KakaoAuthIntent, MemberAuthType, MemberStatus, MemberType, TelegramAuthIntent } from '../../enums/member.enum';
-import { availableKindergartenAdminSorts, availableMemberSorts } from '../../config';
+import { MEMBER_NICK_PATTERN, availableKindergartenAdminSorts, availableMemberSorts } from '../../config';
 import { Direction, Message } from '../../enums/common.enum';
 import { PreviewMemberPurpose } from '../../enums/member-preview.enum';
 import { StaffRole } from '../../enums/kindergarten-staff.enum';
@@ -11,7 +11,7 @@ import { StaffRole } from '../../enums/kindergarten-staff.enum';
 export class MemberInput {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
-  @Matches(/^[\p{L}\p{N}_-]{3,20}$/u, { message: Message.INVALID_MEMBER_NICK })
+  @Matches(MEMBER_NICK_PATTERN, { message: Message.INVALID_MEMBER_NICK })
   @Field(() => String)
   memberNick: string;
 
@@ -38,7 +38,7 @@ export class MemberInput {
 export class LoginInput {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
-  @Matches(/^[\p{L}\p{N}_-]{3,20}$/u, { message: Message.INVALID_MEMBER_NICK })
+  @Matches(MEMBER_NICK_PATTERN, { message: Message.INVALID_MEMBER_NICK })
   @Field(() => String)
   memberNick: string;
 
