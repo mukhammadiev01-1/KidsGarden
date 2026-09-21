@@ -2,6 +2,11 @@ services:
   kidsgarden-api:
     build:
       context: .
+      # Build on the host network so registry traffic can use IPv6. The default
+      # bridge is IPv4-only, and in production Cloudflare's KUL edge (reached over
+      # IPv4) stalled two @next/swc tarballs at ~20 KB/s while the SIN edge (IPv6)
+      # served them at 70 MB/s. Only affects image builds, not running containers.
+      network: host
     container_name: kidsgarden-api
     restart: unless-stopped
     env_file:
@@ -21,6 +26,11 @@ services:
   kidsgarden-client:
     build:
       context: ../KidsGarden-client
+      # Build on the host network so registry traffic can use IPv6. The default
+      # bridge is IPv4-only, and in production Cloudflare's KUL edge (reached over
+      # IPv4) stalled two @next/swc tarballs at ~20 KB/s while the SIN edge (IPv6)
+      # served them at 70 MB/s. Only affects image builds, not running containers.
+      network: host
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://127.0.0.1:3000}
         NEXT_PUBLIC_API_GRAPHQL_URL: ${NEXT_PUBLIC_API_GRAPHQL_URL:-http://127.0.0.1:3000/graphql}

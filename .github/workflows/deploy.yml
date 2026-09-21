@@ -26,6 +26,12 @@ jobs:
     name: Deploy to VPS
     runs-on: ubuntu-latest
     environment: production
+    # A cold client build is ~10 min when the registry is healthy. Without a cap,
+    # a stalled `yarn install` (seen in production: a Cloudflare edge serving two
+    # @next/swc tarballs at ~20 KB/s) hangs the job for GitHub's 6h default.
+    # Killing the job drops the SSH session, which kills the remote bash that
+    # holds fd 9, so the server-side flock is released and the next deploy can run.
+    timeout-minutes: 30
     # Never deploy a commit whose CI failed. workflow_dispatch has no parent run,
     # so allow it through explicitly for manual recovery deploys.
     if: >-
