@@ -1,0 +1,124 @@
+name: Deploy
+
+# Both KidsGarden (API) and KidsGarden-client are built by a single compose file
+# at /root/KidsGarden/docker-compose.yml on the VPS, so either repo changing means
+# the same rebuild. This workflow is identical in both repos.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+# Least privilege: this job only needs to read the repo, never to write to it.
+permissions:
+  contents: read
+
+concurrency:
+  # NOTE: GitHub scopes concurrency per-repository, so this does NOT serialize a
+  # deploy from KidsGarden against one from KidsGarden-client. The server-side
+  # flock below is what actually prevents two concurrent rebuilds.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    environment: production
+    # Never deploy a commit whose CI failed. workflow_dispatch has no parent run,
+    # so allow it through explicitly for manual recovery deploys.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          # Via env, not inline templating, so the key never lands in the rendered
+          # script that Actions echoes on failure.
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts; then
+            echo "ssh-keyscan failed for $VPS_HOST"; exit 1
+          fi
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+
+          API_DIR=/root/KidsGarden
+          WEB_DIR=/root/KidsGarden-client
+          ENV_FILE="$API_DIR/.env.docker"
+
+          # Serialize against a deploy triggered from the sibling repo. GitHub's
+          # concurrency group cannot do this across repositories.
+          exec 9>/var/lock/kidsgarden-deploy.lock
+          flock -w 900 9 || { echo "FATAL: another deploy holds the lock"; exit 1; }
+
+          # Preconditions BEFORE mutating anything, so a failure leaves the server
+          # exactly as it was rather than fast-forwarded but unbuilt.
+          [ -f "$ENV_FILE" ] || { echo "FATAL: $ENV_FILE missing"; exit 1; }
+          for d in "$API_DIR" "$WEB_DIR"; do
+            if [ -n "$(git -C "$d" status --porcelain --untracked-files=no)" ]; then
+              echo "FATAL: $d has uncommitted tracked changes; refusing to deploy"
+              git -C "$d" status --short; exit 1
+            fi
+          done
+
+          PREV_API=$(git -C "$API_DIR" rev-parse HEAD)
+          PREV_WEB=$(git -C "$WEB_DIR" rev-parse HEAD)
+          echo "rollback point: api=$PREV_API web=$PREV_WEB"
+
+          # Fast-forward only. Never `git clean` here: .env.docker holds the
+          # production secrets, is untracked, and lives in $API_DIR.
+          for d in "$API_DIR" "$WEB_DIR"; do
+            git -C "$d" fetch --prune origin
+            git -C "$d" merge --ff-only origin/develop
+            echo "$d -> $(git -C "$d" rev-parse --short HEAD)"
+          done
+
+          cd "$API_DIR"
+          # --env-file is REQUIRED. Compose interpolation reads ./.env, which does
+          # not exist here, so without this the client's NEXT_PUBLIC_* build args
+          # silently fall back to the http://127.0.0.1:3000 defaults in
+          # docker-compose.yml. Next.js inlines those at BUILD time, so the whole
+          # site would ship pointing at localhost and Google login would break.
+          docker compose --env-file "$ENV_FILE" up -d --build
+          REMOTE
+
+      - name: Health check
+        run: |
+          set -e
+          for i in $(seq 1 12); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://kidsgarden.uz/ || echo 000)
+            gql=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+              https://kidsgarden.uz/graphql -H 'Content-Type: application/json' \
+              -d '{"query":"{__typename}"}' || echo 000)
+            # Catches the failure mode above: if the client was built with the
+            # localhost fallback, the served HTML carries 127.0.0.1:3000.
+            built=$(curl -s --max-time 10 https://kidsgarden.uz/ | grep -c '127.0.0.1:3000' || true)
+            echo "attempt $i: site=$code graphql=$gql localhost-refs=$built"
+            if [ "$code" = "200" ] && [ "$gql" = "200" ] && [ "$built" = "0" ]; then
+              echo "deploy healthy"; exit 0
+            fi
+          done
+          echo "health check FAILED - previous images are still on the host; roll back with the commits printed above"
+          exit 1
+
+      - name: Prune old images
+        # Only after the health check passes, so a failed deploy still has the
+        # previous images on disk to roll back to.
+        if: success()
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'docker image prune -f'

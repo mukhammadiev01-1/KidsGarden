@@ -8,7 +8,6 @@ import { AppResolver } from './app.resolver'; // GraphQL resolver faylini import
 import { ComponentsModule } from './components/components.module'; // barcha component modullarni birlashtiruvchi modul
 import { DatabaseModule } from './database/database.module'; // database ulanish moduli
 import { T } from './libs/types/common';
-import { SocketModule } from './socket/socket.module';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const enableGraphqlPlayground = !isProduction && process.env.GRAPHQL_PLAYGROUND !== 'false';
@@ -38,7 +37,7 @@ const enableGraphqlIntrospection = !isProduction || process.env.GRAPHQL_INTROSPE
 },
     }),
     ComponentsModule, // business logic component modullarini ulaydi 
-    DatabaseModule, SocketModule, // MongoDB / database modulini ulaydi
+    DatabaseModule, // MongoDB / database modulini ulaydi
   ],
   controllers: [AppController], // REST APIcontroller lar shu yerda ro'yxat qilinadi
   providers: [AppService, AppResolver], // service va resolver(GRAPHQL) lar shu yerda ishlaydi

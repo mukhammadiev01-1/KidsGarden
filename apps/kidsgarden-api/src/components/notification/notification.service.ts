@@ -139,46 +139,6 @@ export class NotificationService {
 		return notifications;
 	}
 
-	public async notifyKindergartenApplicationCreated(): Promise<void> {
-		return;
-	}
-
-	public async notifyKindergartenApplicationStatusUpdated(): Promise<void> {
-		return;
-	}
-
-	public async notifyApplicationChatMessageCreated(): Promise<void> {
-		return;
-	}
-
-	public async notifyTeacherApplicationCreated(): Promise<void> {
-		return;
-	}
-
-	public async notifyTeacherApplicationStatusUpdated(): Promise<void> {
-		return;
-	}
-
-	public async notifyKindergartenAdminApplicationCreated(): Promise<void> {
-		return;
-	}
-
-	public async notifyKindergartenAdminApplicationStatusUpdated(): Promise<void> {
-		return;
-	}
-
-	public async notifyCommentReplied(): Promise<void> {
-		return;
-	}
-
-	public async notifyCommentLiked(): Promise<void> {
-		return;
-	}
-
-	public async notifyAnnouncementCreated(): Promise<void> {
-		return;
-	}
-
 	private shapeInquiryMatch(authMember: Member, input: NotificationsInquiry): PipelineStage.Match['$match'] {
 		const match: T = { recipientId: authMember._id };
 		const { isRead, type, targetType, targetId } = input.search ?? {};

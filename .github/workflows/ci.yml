@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+
+# Least privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+
+      # The Dockerfile installs with `yarn install --frozen-lockfile`, so CI must
+      # use yarn too. A package-lock.json is also present in this repo; yarn.lock
+      # is the one that governs the image, and --frozen-lockfile fails the build
+      # if package.json and yarn.lock ever drift apart.
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck
+        run: npx tsc -p tsconfig.build.json --noEmit
+
+      - name: Build
+        run: yarn build
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t kidsgarden-api:ci .
