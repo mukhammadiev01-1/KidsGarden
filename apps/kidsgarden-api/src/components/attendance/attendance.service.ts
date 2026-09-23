@@ -274,9 +274,17 @@ export class AttendanceService {
 		if (input.attendanceStatus) match.attendanceStatus = input.attendanceStatus;
 	}
 
+	/**
+	 * attendanceDate is a calendar day, stored as midnight UTC of that day.
+	 *
+	 * Clients send Date.UTC(y, m, d) for the day the user is looking at, so this is
+	 * a no-op for well-formed input. It used to call setHours(), which truncates in
+	 * the SERVER's timezone: correct only because the container happens to run in
+	 * UTC, and a silent day-shift for anyone east of UTC if that ever changed.
+	 */
 	private normalizeAttendanceDate(date: Date): Date {
 		const attendanceDate = new Date(date);
-		attendanceDate.setHours(0, 0, 0, 0);
+		attendanceDate.setUTCHours(0, 0, 0, 0);
 		return attendanceDate;
 	}
 
