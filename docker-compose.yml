@@ -16,8 +16,12 @@ services:
       NODE_ENV: production
       PORT_API: ${PORT_API:-3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:7007,http://localhost:7007}
+    # Bound to loopback: nginx proxies to 127.0.0.1, so nothing external needs these.
+    # Previously published on 0.0.0.0, which served the whole app over plain HTTP on
+    # this port, bypassing TLS. UFW could not close it -- Docker writes its own
+    # iptables rules that bypass ufw -- so the bind address is the actual fix.
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     volumes:
       - ./uploads:/usr/src/app/uploads
     networks:
@@ -55,8 +59,12 @@ services:
       NEXT_PUBLIC_KAKAO_REDIRECT_URI: ${NEXT_PUBLIC_KAKAO_REDIRECT_URI:-}
       NEXT_PUBLIC_TELEGRAM_BOT_NAME: ${NEXT_PUBLIC_TELEGRAM_BOT_NAME:-}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+    # Bound to loopback: nginx proxies to 127.0.0.1, so nothing external needs these.
+    # Previously published on 0.0.0.0, which served the whole app over plain HTTP on
+    # this port, bypassing TLS. UFW could not close it -- Docker writes its own
+    # iptables rules that bypass ufw -- so the bind address is the actual fix.
     ports:
-      - "${CLIENT_PORT:-7007}:3000"
+      - "127.0.0.1:${CLIENT_PORT:-7007}:3000"
     depends_on:
       - kidsgarden-api
     networks:
