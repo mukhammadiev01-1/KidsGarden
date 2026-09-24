@@ -15,7 +15,7 @@ import { Group } from '../../libs/dto/group/group';
 import { Kindergarten } from '../../libs/dto/kindergarten/kindergarten';
 import { KindergartenStaff } from '../../libs/dto/kindergarten-staff/kindergarten-staff';
 import { Member } from '../../libs/dto/member/member';
-import { capPaginationLimit, escapeRegex } from '../../libs/config';
+import { capPaginationLimit, escapeRegex, lookupChildGroup, lookupChildKindergarten } from '../../libs/config';
 
 @Injectable()
 export class ChildService {
@@ -117,7 +117,14 @@ export class ChildService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
+						list: [
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
+							lookupChildKindergarten,
+							{ $unwind: { path: '$kindergartenData', preserveNullAndEmptyArrays: true } },
+							lookupChildGroup,
+							{ $unwind: { path: '$groupData', preserveNullAndEmptyArrays: true } },
+						],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

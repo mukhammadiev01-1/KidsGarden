@@ -156,6 +156,24 @@ export const lookupMember = {
 	},
 };
 
+export const lookupChildKindergarten = {
+	$lookup: {
+		from: 'kindergartens',
+		localField: 'kindergartenId',
+		foreignField: '_id',
+		as: 'kindergartenData',
+	},
+};
+
+export const lookupChildGroup = {
+	$lookup: {
+		from: 'groups',
+		localField: 'groupId',
+		foreignField: '_id',
+		as: 'groupData',
+	},
+};
+
 export const publicMemberProjection = {
 	_id: 1,
 	memberNick: 1,

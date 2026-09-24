@@ -2,6 +2,8 @@ import { Field, ObjectType } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
 import { TotalCounter } from '../member/member';
 import { ChildGender, ChildStatus } from '../../enums/child.enum';
+import { Group } from '../group/group';
+import { Kindergarten } from '../kindergarten/kindergarten';
 
 @ObjectType()
 export class Child {
@@ -37,6 +39,14 @@ export class Child {
 
 	@Field(() => Date)
 	updatedAt: Date;
+
+	/** Resolved by getChildren so clients can show the center and class names
+	 *  without fetching every group and kindergarten to look them up. */
+	@Field(() => Kindergarten, { nullable: true })
+	kindergartenData?: Kindergarten;
+
+	@Field(() => Group, { nullable: true })
+	groupData?: Group;
 }
 
 @ObjectType()
