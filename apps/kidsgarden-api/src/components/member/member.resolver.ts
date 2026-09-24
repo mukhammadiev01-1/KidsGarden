@@ -135,6 +135,18 @@ public async updateMember(
   return await this.memberService.updateMember(memberId, input); // member ma'lumotini service dan oladi
 }
 
+/**
+ * Re-issues the JWT from the current DB record. The token carries role, status
+ * and profile fields, and clients decode it for their in-app identity; without
+ * this a role/status change stayed invisible on the device for up to 30 days.
+ */
+@UseGuards(AuthGuard)
+@Mutation(() => Member)
+public async refreshToken(@AuthMember('_id') memberId: ObjectId): Promise<Member> {
+  console.log('Mutation: refreshToken');
+  return await this.memberService.refreshToken(memberId);
+}
+
 @UseGuards(AuthGuard)
 @Query(() => String)
 public async checkAuth(

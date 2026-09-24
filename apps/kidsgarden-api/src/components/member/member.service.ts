@@ -4,6 +4,7 @@ import {
 	Injectable,
 	InternalServerErrorException,
 	NotFoundException,
+	UnauthorizedException,
 } from '@nestjs/common'; // NestJS exception va service dekoratorlarini import qiladi
 import { InjectModel } from '@nestjs/mongoose'; // Mongoose modelni inject qilish uchun import
 import { Model, ObjectId } from 'mongoose'; // Mongoose Model type ni import qiladi
@@ -165,6 +166,15 @@ export class MemberService {
 
 	public async kakaoLogin(input: KakaoLoginInput): Promise<Member> {
 		return this.socialAuthService.kakaoLogin(input);
+	}
+
+	public async refreshToken(memberId: ObjectId): Promise<Member> {
+		const member: Member = await this.memberModel.findById(memberId).lean<Member>().exec();
+		if (!member || member.memberStatus !== MemberStatus.ACTIVE) {
+			throw new UnauthorizedException(Message.NOT_AUTHENTICATED);
+		}
+		member.accessToken = await this.authService.createToken(member);
+		return member;
 	}
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
