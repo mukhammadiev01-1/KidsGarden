@@ -15,7 +15,7 @@ import {
 	StaffCandidatesInquiry,
 } from '../../libs/dto/kindergarten-staff/kindergarten-staff.input';
 import { KindergartenStaffUpdate } from '../../libs/dto/kindergarten-staff/kindergarten-staff.update';
-import { capPaginationLimit, escapeRegex } from '../../libs/config';
+import { capPaginationLimit, escapeRegex, lookupPublicMember } from '../../libs/config';
 
 @Injectable()
 export class KindergartenStaffService {
@@ -93,7 +93,12 @@ export class KindergartenStaffService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
+						list: [
+							{ $skip: (input.page - 1) * limit },
+							{ $limit: limit },
+							lookupPublicMember,
+							{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: true } },
+						],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

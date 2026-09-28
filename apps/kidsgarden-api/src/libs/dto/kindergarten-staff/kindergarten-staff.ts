@@ -1,6 +1,6 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 import type { ObjectId } from 'mongoose';
-import { TotalCounter } from '../member/member';
+import { PublicMember, TotalCounter } from '../member/member';
 import { StaffRole, StaffStatus } from '../../enums/kindergarten-staff.enum';
 import { MemberStatus, MemberType } from '../../enums/member.enum';
 
@@ -26,6 +26,10 @@ export class KindergartenStaff {
 
 	@Field(() => Date)
 	updatedAt: Date;
+
+	/** Resolved by getKindergartenStaffs so rosters can show a name and avatar. */
+	@Field(() => PublicMember, { nullable: true })
+	memberData?: PublicMember;
 }
 
 @ObjectType()
