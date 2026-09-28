@@ -120,6 +120,10 @@ export class PublicMember {
 
 	@Field(() => String, { nullable: true })
 	memberDesc?: string;
+
+	/** Whether the requesting member follows this member (set by getMember). */
+	@Field(() => [MeFollowed], { nullable: true })
+	meFollowed?: MeFollowed[];
 }
 
 @ObjectType()

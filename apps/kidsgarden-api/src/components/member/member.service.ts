@@ -234,6 +234,11 @@ export class MemberService {
 		const targetMember = await this.memberModel.findOne(search).select(publicMemberProjection).lean().exec(); // leans bu yerda ishlatilgan, chunki bu query faqat o'qish uchun ishlatiladi va bizga mongoose document emas, balki oddiy JavaScript object kerak, shuning uchun lean() methodi ishlatiladi
 		if (!targetMember) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
+		// Public profile pages need the follow state to render Follow/Unfollow.
+		if (memberId) {
+			targetMember.meFollowed = await this.checkSubscription(memberId, targetId);
+		}
+
 		return targetMember;
 	}
 
