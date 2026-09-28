@@ -179,16 +179,27 @@ export class MemberService {
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
 		const update = this.shapeSelfUpdateInput(input);
-		const result: Member = await this.memberModel
-			.findOneAndUpdate(
-				{
-					_id: memberId,
-					memberStatus: MemberStatus.ACTIVE,
-				},
-				update,
-				{ new: true },
-			)
-			.exec();
+		// Same rule as signup: a phone edited on the profile page used to be
+		// stored exactly as typed ("010-1234-5678"), and a duplicate surfaced as
+		// a raw Mongo E11000 message.
+		if (typeof update.memberPhone === 'string') update.memberPhone = this.normalizeMemberPhone(update.memberPhone);
+
+		let result: Member;
+		try {
+			result = await this.memberModel
+				.findOneAndUpdate(
+					{
+						_id: memberId,
+						memberStatus: MemberStatus.ACTIVE,
+					},
+					update,
+					{ new: true },
+				)
+				.exec();
+		} catch (err: any) {
+			if (err?.code === 11000) throw this.toSignupCreateException(err);
+			throw err;
+		}
 
 		if (!result) throw new InternalServerErrorException(Message.UPLOAD_FAILED);
 

@@ -75,6 +75,57 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 		}
 	}
 
+	/**
+	 * Rate-limit helpers. Each returns null when Redis is unavailable so callers
+	 * can fall back to their in-memory counters (which reset on deploy and are
+	 * per-instance -- the reason these live here now).
+	 */
+	public async incrementCounter(key: string, ttlSeconds: number): Promise<number | null> {
+		if (!this.commandClient || !this.isClientReady(this.commandClient)) return null;
+		try {
+			const count = await this.commandClient.incr(key);
+			if (count === 1) await this.commandClient.expire(key, ttlSeconds);
+			return count;
+		} catch (err) {
+			this.logger.warn(`Redis incr failed on ${key}: ${this.getErrorMessage(err)}`);
+			return null;
+		}
+	}
+
+	public async getCounter(key: string): Promise<number | null> {
+		if (!this.commandClient || !this.isClientReady(this.commandClient)) return null;
+		try {
+			const value = await this.commandClient.get(key);
+			return value === null ? 0 : Number(value) || 0;
+		} catch (err) {
+			this.logger.warn(`Redis get failed on ${key}: ${this.getErrorMessage(err)}`);
+			return null;
+		}
+	}
+
+	/** Sets a key that expires after ttlSeconds; true when stored. */
+	public async setExpiringFlag(key: string, ttlSeconds: number): Promise<boolean> {
+		if (!this.commandClient || !this.isClientReady(this.commandClient)) return false;
+		try {
+			await this.commandClient.set(key, '1', 'EX', ttlSeconds);
+			return true;
+		} catch (err) {
+			this.logger.warn(`Redis set failed on ${key}: ${this.getErrorMessage(err)}`);
+			return false;
+		}
+	}
+
+	/** true/false when Redis answered, null when unavailable. */
+	public async hasFlag(key: string): Promise<boolean | null> {
+		if (!this.commandClient || !this.isClientReady(this.commandClient)) return null;
+		try {
+			return (await this.commandClient.exists(key)) === 1;
+		} catch (err) {
+			this.logger.warn(`Redis exists failed on ${key}: ${this.getErrorMessage(err)}`);
+			return null;
+		}
+	}
+
 	public async ping(): Promise<boolean> {
 		if (!this.commandClient || !this.isClientReady(this.commandClient)) return false;
 

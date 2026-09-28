@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { RedisService } from '../redis/redis.service';
 
 type TranslationUsageCounter = {
 	date: string;
@@ -23,14 +24,18 @@ type TranslateMessageParams = {
 
 @Injectable()
 export class ChatTranslationService {
+	// In-memory fallback only; Redis holds the real per-day counter.
 	private readonly usageCounters = new Map<string, TranslationUsageCounter>();
+	private static readonly USAGE_TTL_SECONDS = 2 * 24 * 60 * 60;
+
+	constructor(private readonly redisService: RedisService) {}
 	private readonly supportedTargetLangs = ['en', 'ko', 'ru', 'uz'];
 
 	public async translateMessage(params: TranslateMessageParams): Promise<string> {
 		const text = this.normalizeText(params.text);
 		const targetLang = this.normalizeTargetLang(params.targetLang);
 		this.assertTextAllowed(text);
-		this.assertDailyLimitAllowed(params.memberId);
+		await this.assertDailyLimitAllowed(params.memberId);
 
 		const apiKey = process.env.OPENAI_API_KEY?.trim();
 		const model = process.env.OPENAI_TRANSLATION_MODEL?.trim() || 'gpt-4o-mini';
@@ -73,7 +78,7 @@ export class ChatTranslationService {
 				throw new Error('OpenAI translation response did not include translated text');
 			}
 
-			this.recordSuccessfulRequest(params.memberId);
+			await this.recordSuccessfulRequest(params.memberId);
 			return translatedText;
 		} catch (err) {
 			throw new ServiceUnavailableException('Message translation is temporarily unavailable. Please try again later.');
@@ -106,11 +111,12 @@ export class ChatTranslationService {
 		}
 	}
 
-	private assertDailyLimitAllowed(memberId: string): void {
+	private async assertDailyLimitAllowed(memberId: string): Promise<void> {
 		const key = this.getUsageKey(memberId);
 		const today = this.getTodayKey();
+		const redisCount = await this.redisService.getCounter(`ratelimit:translate:usage:${today}:${key}`);
 		const counter = this.usageCounters.get(key);
-		const count = counter?.date === today ? counter.count : 0;
+		const count = redisCount ?? (counter?.date === today ? counter.count : 0);
 		const limit = this.getPositiveIntEnv('TRANSLATION_DAILY_LIMIT_PER_USER', 30);
 
 		if (count >= limit) {
@@ -118,9 +124,10 @@ export class ChatTranslationService {
 		}
 	}
 
-	private recordSuccessfulRequest(memberId: string): void {
+	private async recordSuccessfulRequest(memberId: string): Promise<void> {
 		const key = this.getUsageKey(memberId);
 		const today = this.getTodayKey();
+		await this.redisService.incrementCounter(`ratelimit:translate:usage:${today}:${key}`, ChatTranslationService.USAGE_TTL_SECONDS);
 		const counter = this.usageCounters.get(key);
 
 		if (!counter || counter.date !== today) {

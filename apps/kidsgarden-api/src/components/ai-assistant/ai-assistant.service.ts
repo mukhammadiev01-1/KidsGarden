@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, ServiceUnavailableException } from '@n
 import { AiAssistantInput } from '../../libs/dto/ai-assistant/ai-assistant.input';
 import { AiAssistantResponse } from '../../libs/dto/ai-assistant/ai-assistant';
 import { Member } from '../../libs/dto/member/member';
+import { RedisService } from '../redis/redis.service';
 
 type UsageCounter = {
 	date: string;
@@ -24,8 +25,13 @@ type OpenAiResponse = {
 
 @Injectable()
 export class AiAssistantService {
+	// In-memory fallback only (per instance, reset on deploy); Redis is the
+	// source of truth when it is up.
 	private readonly usageCounters = new Map<string, UsageCounter>();
 	private readonly cooldownCounters = new Map<string, CooldownCounter>();
+	private static readonly USAGE_TTL_SECONDS = 2 * 24 * 60 * 60;
+
+	constructor(private readonly redisService: RedisService) {}
 
 	public async askAiAssistant(input: AiAssistantInput, authMember: Member | null, req: any): Promise<AiAssistantResponse> {
 		if (!this.isAssistantEnabled()) {
@@ -39,10 +45,10 @@ export class AiAssistantService {
 		const offTopicAnswer = this.getOffTopicGuardAnswer(message);
 		if (offTopicAnswer) return offTopicAnswer;
 
-		const cooldownAnswer = this.getCooldownAnswer(usageKey);
+		const cooldownAnswer = await this.getCooldownAnswer(usageKey);
 		if (cooldownAnswer) return cooldownAnswer;
 
-		const limitAnswer = this.getUsageLimitAnswer(authMember, usageKey);
+		const limitAnswer = await this.getUsageLimitAnswer(authMember, usageKey);
 		if (limitAnswer) return limitAnswer;
 
 		const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -86,7 +92,7 @@ export class AiAssistantService {
 				throw new Error('OpenAI response did not include answer text');
 			}
 
-			this.recordSuccessfulOpenAiRequest(usageKey);
+			await this.recordSuccessfulOpenAiRequest(usageKey);
 			return { answer, model };
 		} catch (err) {
 			throw new ServiceUnavailableException('AI Assistant is temporarily unavailable. Please try again later.');
@@ -111,11 +117,12 @@ export class AiAssistantService {
 		}
 	}
 
-	private getUsageLimitAnswer(authMember: Member | null, usageKey: string): AiAssistantResponse | null {
-		const counter = this.usageCounters.get(usageKey);
+	private async getUsageLimitAnswer(authMember: Member | null, usageKey: string): Promise<AiAssistantResponse | null> {
 		const limit = this.getDailyLimit(authMember);
 		const today = this.getTodayKey();
-		const count = counter?.date === today ? counter.count : 0;
+		const redisCount = await this.redisService.getCounter(`ratelimit:ai:usage:${today}:${usageKey}`);
+		const counter = this.usageCounters.get(usageKey);
+		const count = redisCount ?? (counter?.date === today ? counter.count : 0);
 
 		if (count >= limit) {
 			return {
@@ -127,8 +134,11 @@ export class AiAssistantService {
 		return null;
 	}
 
-	private recordSuccessfulOpenAiRequest(usageKey: string): void {
+	private async recordSuccessfulOpenAiRequest(usageKey: string): Promise<void> {
 		const today = this.getTodayKey();
+		const cooldownSeconds = this.getPositiveIntEnv('AI_ASSISTANT_COOLDOWN_SECONDS', 10);
+		await this.redisService.incrementCounter(`ratelimit:ai:usage:${today}:${usageKey}`, AiAssistantService.USAGE_TTL_SECONDS);
+		await this.redisService.setExpiringFlag(`ratelimit:ai:cooldown:${usageKey}`, cooldownSeconds);
 		const counter = this.usageCounters.get(usageKey);
 
 		if (!counter || counter.date !== today) {
@@ -171,13 +181,17 @@ export class AiAssistantService {
 		return this.getPositiveIntEnv('AI_ASSISTANT_DAILY_LIMIT_USER', 15);
 	}
 
-	private getCooldownAnswer(usageKey: string): AiAssistantResponse | null {
+	private async getCooldownAnswer(usageKey: string): Promise<AiAssistantResponse | null> {
 		const cooldownSeconds = this.getPositiveIntEnv('AI_ASSISTANT_COOLDOWN_SECONDS', 10);
-		const counter = this.cooldownCounters.get(usageKey);
-		if (!counter) return null;
-
-		const elapsedMs = Date.now() - counter.lastRequestAt;
-		if (elapsedMs >= cooldownSeconds * 1000) return null;
+		const redisCoolingDown = await this.redisService.hasFlag(`ratelimit:ai:cooldown:${usageKey}`);
+		if (redisCoolingDown === false) return null;
+		if (redisCoolingDown === null) {
+			// Redis unavailable: fall back to this instance's memory.
+			const counter = this.cooldownCounters.get(usageKey);
+			if (!counter) return null;
+			const elapsedMs = Date.now() - counter.lastRequestAt;
+			if (elapsedMs >= cooldownSeconds * 1000) return null;
+		}
 
 		return {
 			answer: 'Please wait a few seconds before sending another message.',
