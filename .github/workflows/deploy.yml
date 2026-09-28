@@ -101,6 +101,9 @@ jobs:
           REMOTE
 
       - name: Health check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -e
           for i in $(seq 1 12); do
@@ -112,8 +115,17 @@ jobs:
             # Catches the failure mode above: if the client was built with the
             # localhost fallback, the served HTML carries 127.0.0.1:3000.
             built=$(curl -s --max-time 10 https://kidsgarden.uz/ | grep -c '127.0.0.1:3000' || true)
-            echo "attempt $i: site=$code graphql=$gql localhost-refs=$built"
-            if [ "$code" = "200" ] && [ "$gql" = "200" ] && [ "$built" = "0" ]; then
+            # The WebSocket route: nginx must answer the upgrade with 101, or
+            # every realtime feature silently degrades to polling-by-refresh.
+            ws=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://kidsgarden.uz/realtime \
+              -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
+              -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' || echo 000)
+            # Redis: the API logs 'Redis command client ready' and the channel
+            # subscription on boot. Redis was once dead for days and nothing noticed.
+            redis=$(ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+              "docker logs --since 15m kidsgarden-api 2>&1 | grep -c 'Redis command client ready'" || echo 0)
+            echo "attempt $i: site=$code graphql=$gql localhost-refs=$built realtime=$ws redis-ready=$redis"
+            if [ "$code" = "200" ] && [ "$gql" = "200" ] && [ "$built" = "0" ] && [ "$ws" = "101" ] && [ "$redis" != "0" ]; then
               echo "deploy healthy"; exit 0
             fi
           done
