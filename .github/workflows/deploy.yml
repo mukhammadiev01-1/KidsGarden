@@ -117,15 +117,22 @@ jobs:
             built=$(curl -s --max-time 10 https://kidsgarden.uz/ | grep -c '127.0.0.1:3000' || true)
             # The WebSocket route: nginx must answer the upgrade with 101, or
             # every realtime feature silently degrades to polling-by-refresh.
-            ws=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://kidsgarden.uz/realtime \
+            # curl keeps reading the upgraded stream until --max-time and exits 28,
+            # so ignore its exit code and keep only the 3-digit status.
+            ws=$(curl -s -o /dev/null -w '%{http_code}' --http1.1 --max-time 3 https://kidsgarden.uz/realtime \
               -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
-              -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' || echo 000)
-            # Redis: the API logs 'Redis command client ready' and the channel
-            # subscription on boot. Redis was once dead for days and nothing noticed.
+              -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' ; true)
+            ws=${ws:0:3}
+            # Redis: the most recent Redis client state line in the current
+            # container's log must be 'ready' (not 'closed'). Whole container
+            # lifetime, not a time window: a deploy that does not recreate the
+            # API container has no fresh boot log. Redis was once dead for days
+            # and nothing noticed.
             redis=$(ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
-              "docker logs --since 15m kidsgarden-api 2>&1 | grep -c 'Redis command client ready'" || echo 0)
+              "docker logs kidsgarden-api 2>&1 | grep -E 'Redis command client (ready|closed)' | tail -1 | grep -c ready" ; true)
+            redis=$(printf '%s' "$redis" | head -1)
             echo "attempt $i: site=$code graphql=$gql localhost-refs=$built realtime=$ws redis-ready=$redis"
-            if [ "$code" = "200" ] && [ "$gql" = "200" ] && [ "$built" = "0" ] && [ "$ws" = "101" ] && [ "$redis" != "0" ]; then
+            if [ "$code" = "200" ] && [ "$gql" = "200" ] && [ "$built" = "0" ] && [ "$ws" = "101" ] && [ "$redis" = "1" ]; then
               echo "deploy healthy"; exit 0
             fi
           done
