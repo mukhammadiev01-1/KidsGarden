@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
 import { ApplicationResolver } from './application.resolver';
 import { ApplicationService } from './application.service';
+import { ApplicationDocumentJanitorService } from './application-document-janitor.service';
 import ApplicationSchema from '../../shemas/Application.model';
 import KindergartenSchema from '../../shemas/Kindergarten.model';
 import KindergartenStaffSchema from '../../shemas/KindergartenStaff.model';
@@ -18,7 +19,7 @@ import MemberSchema from '../../shemas/Member.model';
 		AuthModule,
 		NotificationModule,
 	],
-	providers: [ApplicationResolver, ApplicationService],
+	providers: [ApplicationResolver, ApplicationService, ApplicationDocumentJanitorService],
 	exports: [ApplicationService],
 })
 export class ApplicationModule {}
