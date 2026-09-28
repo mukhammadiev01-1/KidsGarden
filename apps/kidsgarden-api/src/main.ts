@@ -26,18 +26,6 @@ function parseOriginList(value: string | undefined): string[] {
 		.filter(Boolean);
 }
 
-function isAllowedDevOrigin(origin: string): boolean {
-	return (
-		origin.startsWith('http://localhost:') ||
-		origin.startsWith('http://127.0.0.1:') ||
-		origin.startsWith('http://10.0.2.2:') ||
-		origin.startsWith('http://192.168.') ||
-		origin.startsWith('http://10.') ||
-		origin.startsWith('http://172.') ||
-		origin.startsWith('exp://')
-	);
-}
-
 function getAllowedCorsOrigins(): string[] {
 	const configuredOrigins = parseOriginList(process.env.CORS_ORIGIN);
 
@@ -54,14 +42,6 @@ function getAllowedCorsOrigins(): string[] {
 		'http://localhost:7007',
 		'http://127.0.0.1:3000',
 		'http://localhost:3000',
-		'http://127.0.0.1:8081',
-		'http://localhost:8081',
-		'http://127.0.0.1:8082',
-		'http://localhost:8082',
-		'http://127.0.0.1:19000',
-		'http://localhost:19000',
-		'http://127.0.0.1:19006',
-		'http://localhost:19006',
 		...configuredOrigins,
 	];
 }
@@ -74,21 +54,7 @@ async function bootstrap() {
 	const allowedCorsOrigins = getAllowedCorsOrigins();
 	app.enableCors({
 		origin: (origin, callback) => {
-			if (!origin) {
-				callback(null, true);
-				return;
-			}
-
-			if (process.env.NODE_ENV === 'production') {
-				if (allowedCorsOrigins.includes(origin)) {
-					callback(null, true);
-				} else {
-					callback(new Error('Not allowed by CORS'));
-				}
-				return;
-			}
-
-			if (allowedCorsOrigins.includes(origin) || isAllowedDevOrigin(origin)) {
+			if (!origin || allowedCorsOrigins.includes(origin)) {
 				callback(null, true);
 				return;
 			}
