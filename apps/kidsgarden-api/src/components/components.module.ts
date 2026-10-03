@@ -16,6 +16,7 @@ import { KindergartenAdminApplicationModule } from './kindergarten-admin-applica
 import { ApplicationModule } from './application/application.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationModule } from './notification/notification.module';
+import { PushModule } from './push/push.module';
 import { RedisModule } from './redis/redis.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
@@ -31,6 +32,7 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
     ApplicationModule,
     ChatModule,
     NotificationModule,
+    PushModule,
     RedisModule,
     RealtimeModule,
     AiAssistantModule,

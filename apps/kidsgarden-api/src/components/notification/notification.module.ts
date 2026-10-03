@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { RedisModule } from '../redis/redis.module';
+import { PushModule } from '../push/push.module';
 import { NotificationResolver } from './notification.resolver';
 import { NotificationService } from './notification.service';
 import MemberSchema from '../../shemas/Member.model';
@@ -13,6 +14,7 @@ import NotificationSchema from '../../shemas/Notification.model';
 		MongooseModule.forFeature([{ name: 'Member', schema: MemberSchema }]),
 		AuthModule,
 		RedisModule,
+		PushModule,
 	],
 	providers: [NotificationResolver, NotificationService],
 	exports: [NotificationService],

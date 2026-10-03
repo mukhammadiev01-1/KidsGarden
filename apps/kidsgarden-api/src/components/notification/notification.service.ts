@@ -11,6 +11,7 @@ import { NotificationInput, NotificationsInquiry } from '../../libs/dto/notifica
 import { T } from '../../libs/types/common';
 import { RedisService } from '../redis/redis.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { PushService } from '../push/push.service';
 
 const NOTIFICATION_CREATED_EVENT = 'notification.created';
 
@@ -31,6 +32,7 @@ export class NotificationService {
 		@InjectModel('Notification') private readonly notificationModel: Model<Notification>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		private readonly redisService: RedisService,
+		private readonly pushService: PushService,
 	) {}
 
 	public async getMyNotifications(authMember: Member, input: NotificationsInquiry): Promise<Notifications> {
@@ -126,6 +128,8 @@ export class NotificationService {
 			this.logger.warn(`Realtime notification publish failed: ${this.getErrorMessage(err)}`);
 		});
 
+		void this.pushNotification(notification);
+
 		return notification;
 	}
 
@@ -191,6 +195,33 @@ export class NotificationService {
 		});
 
 		if (!published) this.logger.warn(`Realtime notification publish skipped for ${notification._id.toString()}.`);
+	}
+
+	/** Phone push for the same event. Best effort; PushService never throws. */
+	private async pushNotification(notification: Notification): Promise<void> {
+		// Chat messages are hidden from the notification list (they have their own
+		// unread counter), so they do not count toward the badge either.
+		const badge = await this.notificationModel
+			.countDocuments({
+				recipientId: notification.recipientId,
+				isRead: false,
+				type: { $nin: this.hiddenChatNotificationTypes },
+			})
+			.exec()
+			.catch(() => undefined);
+
+		await this.pushService.sendToMember(notification.recipientId, {
+			title: notification.title,
+			body: notification.message,
+			badge,
+			data: {
+				notificationId: notification._id.toString(),
+				type: notification.type,
+				targetType: notification.targetType,
+				targetId: notification.targetId,
+				metadata: notification.metadata,
+			},
+		});
 	}
 
 	private shapeRealtimeNotification(notification: Notification): Record<string, unknown> {
