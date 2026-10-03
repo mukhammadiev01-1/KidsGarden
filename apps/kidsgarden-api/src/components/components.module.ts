@@ -17,6 +17,7 @@ import { ApplicationModule } from './application/application.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationModule } from './notification/notification.module';
 import { PushModule } from './push/push.module';
+import { AppLoginModule } from './app-login/app-login.module';
 import { RedisModule } from './redis/redis.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
@@ -33,6 +34,7 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
     ChatModule,
     NotificationModule,
     PushModule,
+    AppLoginModule,
     RedisModule,
     RealtimeModule,
     AiAssistantModule,
